@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -10,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const AuthModal = ({ open, onOpenChange }) => {
   const { login, register } = useAuth();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -66,6 +68,8 @@ const AuthModal = ({ open, onOpenChange }) => {
         onOpenChange(false);
         // Reset form
         setFormData({ email: '', password: '', name: '', confirmPassword: '' });
+        // Navigate to dashboard
+        navigate('/dashboard');
       } else {
         setErrors({ general: result.error });
       }
@@ -87,6 +91,8 @@ const AuthModal = ({ open, onOpenChange }) => {
         onOpenChange(false);
         // Reset form
         setFormData({ email: '', password: '', name: '', confirmPassword: '' });
+        // Navigate to dashboard
+        navigate('/dashboard');
       } else {
         setErrors({ general: result.error });
       }

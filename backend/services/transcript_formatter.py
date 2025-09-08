@@ -1,7 +1,7 @@
 import os
 import re
 from typing import Dict, Any
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from .custom_llm import CustomLlmChat, UserMessage
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -43,11 +43,11 @@ To:
 Return ONLY the reformatted transcript in proper paragraph format."""
 
             # Initialize chat
-            chat = LlmChat(
+            chat = CustomLlmChat(
                 api_key=self.api_key,
                 session_id=f"transcript_reformat_{hash(cleaned_transcript[:150])}",
                 system_message=system_prompt
-            ).with_model("openai", "gpt-4o-mini")
+            ).with_model("groq", "meta-llama/llama-4-scout-17b-16e-instruct")
 
             # Split transcript into chunks if too long
             max_chunk_size = 8000
@@ -80,7 +80,7 @@ Return ONLY the reformatted transcript in proper paragraph format."""
                 'formatted_transcript': self._basic_cleanup(raw_transcript)
             }
     
-    async def _format_chunk(self, chat: LlmChat, chunk: str) -> str:
+    async def _format_chunk(self, chat: CustomLlmChat, chunk: str) -> str:
         """Format a single chunk of transcript"""
         format_prompt = f"""
 Please reformat this transcript segment into proper, readable paragraphs. Fix grammar and flow but preserve ALL spoken content:

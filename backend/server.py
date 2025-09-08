@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 import asyncio
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import re
 
 # Import services and models
@@ -20,6 +20,8 @@ from services.auth_service import AuthService
 from services.scheduler_service import SchedulerService
 from services.video_qa_service import VideoQAService
 from services.transcript_formatter import TranscriptFormatterService
+from services.timestamp_service import TimestampService
+from services.time_range_summary_service import TimeRangeSummaryService
 from models.video_models import (
     VideoProcessRequest, ProcessedVideo, VideoListResponse, 
     VideoProcessResponse, ChannelFollowRequest, FollowedChannel, SearchQuery,
@@ -45,6 +47,8 @@ auth_service = AuthService(db)
 scheduler_service = SchedulerService(db, supadata_service, llm_service, youtube_service)
 qa_service = VideoQAService()
 transcript_formatter = TranscriptFormatterService()
+timestamp_service = TimestampService()
+time_range_summary_service = TimeRangeSummaryService()
 
 # Security
 security = HTTPBearer(auto_error=False)
@@ -77,7 +81,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not credentials:
         return None
     
-    payload = auth_service.verify_token(credentials.credentials)
+    payload = await auth_service.verify_token(credentials.credentials)
     if not payload:
         return None
     
@@ -109,6 +113,45 @@ def extract_video_info(url: str) -> dict:
         'published_at': "Recently",
         'duration': "Unknown"
     }
+
+def get_raw_transcript_data(raw_transcript: str) -> str:
+    """Parse raw transcript data, handling both JSON and string formats"""
+    if not raw_transcript:
+        return ''
+    
+    try:
+        # Try to parse as JSON (new format)
+        import json
+        parsed_data = json.loads(raw_transcript)
+        
+        # If it's a list of transcript segments, convert to formatted text
+        if isinstance(parsed_data, list):
+            formatted_segments = []
+            for segment in parsed_data:
+                if isinstance(segment, dict):
+                    text = segment.get('text', '').strip()
+                    offset = segment.get('offset', 0)
+                    
+                    if text:
+                        # Convert milliseconds to MM:SS format
+                        try:
+                            seconds = int(float(offset)) // 1000
+                            minutes = seconds // 60
+                            seconds = seconds % 60
+                            timestamp = f"{minutes:02d}:{seconds:02d}"
+                        except (ValueError, TypeError):
+                            timestamp = "00:00"
+                        
+                        formatted_segments.append(f"[{timestamp}] {text}")
+            
+            return '\n'.join(formatted_segments)
+        else:
+            # If it's some other JSON structure, return as string
+            return str(parsed_data)
+    
+    except (json.JSONDecodeError, TypeError):
+        # Not JSON, return as-is (old format)
+        return raw_transcript
 
 async def process_channel_videos(channel_id: str, channel_name: str) -> List[ProcessedVideo]:
     """
@@ -274,9 +317,23 @@ async def get_current_user_info(user_id: str = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/auth/logout")
-async def logout_user():
-    """Logout user (client-side token removal)"""
-    return {"status": "success", "message": "Logged out successfully"}
+async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Logout user and blacklist token"""
+    try:
+        if credentials:
+            # Get user ID from token
+            payload = await auth_service.verify_token(credentials.credentials)
+            if payload:
+                user_id = payload.get('user_id')
+                # Blacklist the token
+                await auth_service.blacklist_token(credentials.credentials, user_id)
+                logger.info(f"Token blacklisted for user {user_id}")
+        
+        return {"status": "success", "message": "Logged out successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error during logout: {str(e)}")
+        return {"status": "success", "message": "Logged out successfully"}
 
 # Settings Routes
 
@@ -389,6 +446,8 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
             lang=request.language, 
             text=False  # Get timestamped version
         )
+
+        print('transcript_result:', transcript_result)
         
         if transcript_result['status'] != 'completed':
             return VideoProcessResponse(
@@ -458,6 +517,16 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
                 'contentType': 'general'
             }
         
+        # Prepare raw transcript data - handle both list and string formats
+        raw_transcript_data = transcript_result.get('raw_content', '')
+        if isinstance(raw_transcript_data, list):
+            # Convert list of transcript segments to JSON string for storage
+            import json
+            raw_transcript = json.dumps(raw_transcript_data)
+        else:
+            # It's already a string
+            raw_transcript = str(raw_transcript_data) if raw_transcript_data else ''
+        
         # Create processed video object with real data
         processed_video = ProcessedVideo(
             url=request.url,
@@ -469,6 +538,7 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
             published_at=video_details.get('published_at', 'Recently'),
             duration=video_details.get('duration'),
             transcript=formatted_transcript,  # Use formatted transcript for display
+            raw_transcript=raw_transcript,  # Save raw transcript with timestamps as string
             analysis=VideoAnalysis(**analysis_data),
             chart_data=ChartData(**chart_data),
             language=transcript_result['lang']
@@ -592,7 +662,7 @@ async def follow_channel(request: ChannelFollowRequest, background_tasks: Backgr
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/channels/following")
-async def get_following_channels(user_id: str = Depends(optional_auth)):
+async def get_following_channels(user_id: str = Depends(require_auth)):
     """Get list of followed channels"""
     try:
         # Use demo_user for non-authenticated users
@@ -610,7 +680,7 @@ async def get_following_channels(user_id: str = Depends(optional_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/stats")
-async def get_user_stats(user_id: str = Depends(optional_auth)):
+async def get_user_stats(user_id: str = Depends(require_auth)):
     """Get user statistics"""
     try:
         # Use demo_user for non-authenticated users
@@ -726,13 +796,14 @@ async def get_following_channels():
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/search/videos")
-async def search_videos(q: str, page: int = 1, limit: int = 20):
+async def search_videos(q: str, page: int = 1, limit: int = 20, user_id: str = Depends(require_auth)):
     """Search processed videos"""
     try:
         skip = (page - 1) * limit
         
         # Create search query
         search_filter = {
+            "user_id": user_id,
             "$or": [
                 {"title": {"$regex": q, "$options": "i"}},
                 {"channel_name": {"$regex": q, "$options": "i"}},
@@ -874,6 +945,175 @@ async def get_suggested_questions(video_id: str, user_id: str = Depends(optional
         raise
     except Exception as e:
         logger.error(f"Error getting suggested questions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/videos/{video_id}/timeline")
+async def get_video_timeline(video_id: str, user_id: str = Depends(optional_auth)):
+    """Get the timeline of a video with timestamps"""
+    try:
+        # Find the video
+        query_filter = {"id": video_id}
+        if user_id:
+            query_filter["user_id"] = user_id
+        
+        video = await db.processed_videos.find_one(query_filter)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Use raw_transcript (with timestamps) if available, otherwise fall back to formatted transcript
+        raw_transcript = video.get('raw_transcript', '')
+        formatted_transcript = video.get('transcript', '')
+        
+        # Parse raw transcript data and prefer it for timeline as it should contain timestamps
+        if raw_transcript:
+            transcript_to_use = get_raw_transcript_data(raw_transcript)
+        else:
+            transcript_to_use = formatted_transcript
+        
+        # Log which transcript type we're using for debugging
+        logger.info(f"Timeline for video {video_id}: using {'raw' if raw_transcript else 'formatted'} transcript")
+        
+        if not transcript_to_use:
+            return {
+                'status': 'error',
+                'error': 'No transcript available for this video'
+            }
+        
+        # Get timeline
+        timeline_result = timestamp_service.get_transcript_timeline(transcript_to_use)
+        
+        if timeline_result['status'] == 'success':
+            return timeline_result
+        else:
+            raise HTTPException(status_code=500, detail=timeline_result['error'])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting video timeline: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/videos/{video_id}/time-range-summary")
+async def get_time_range_summary(
+    video_id: str, 
+    time_range: Dict[str, str], 
+    user_id: str = Depends(optional_auth)
+):
+    """Get AI summary for a specific time range of a video"""
+    try:
+        # Validate time range parameters
+        start_time = time_range.get('start_time')
+        end_time = time_range.get('end_time')
+        
+        if not start_time or not end_time:
+            raise HTTPException(
+                status_code=400, 
+                detail="start_time and end_time are required"
+            )
+        
+        # Find the video
+        query_filter = {"id": video_id}
+        if user_id:
+            query_filter["user_id"] = user_id
+        
+        video = await db.processed_videos.find_one(query_filter)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Use raw_transcript (with timestamps) if available, otherwise fall back to formatted transcript
+        raw_transcript = video.get('raw_transcript', '')
+        formatted_transcript = video.get('transcript', '')
+        
+        # Parse raw transcript data and prefer it for time range summary as it should contain timestamps
+        if raw_transcript:
+            transcript_to_use = get_raw_transcript_data(raw_transcript)
+        else:
+            transcript_to_use = formatted_transcript
+        
+        if not transcript_to_use:
+            raise HTTPException(
+                status_code=400,
+                detail="No transcript available for this video"
+            )
+        
+        # Generate time range summary
+        summary_result = await time_range_summary_service.generate_time_range_summary(
+            transcript=transcript_to_use,
+            start_time=start_time,
+            end_time=end_time,
+            video_title=video.get('title', ''),
+            context={
+                'video_id': video_id,
+                'channel_name': video.get('channel_name', ''),
+                'full_analysis': video.get('analysis', {})
+            }
+        )
+        
+        return summary_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating time range summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/videos/{video_id}/compare-time-ranges")
+async def compare_time_ranges(
+    video_id: str, 
+    comparison_data: Dict[str, Any],
+    user_id: str = Depends(optional_auth)
+):
+    """Compare multiple time ranges in a video"""
+    try:
+        time_ranges = comparison_data.get('time_ranges', [])
+        
+        if len(time_ranges) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 time ranges are required for comparison"
+            )
+        
+        # Find the video
+        query_filter = {"id": video_id}
+        if user_id:
+            query_filter["user_id"] = user_id
+        
+        video = await db.processed_videos.find_one(query_filter)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Use raw_transcript (with timestamps) if available, otherwise fall back to formatted transcript
+        raw_transcript = video.get('raw_transcript', '')
+        formatted_transcript = video.get('transcript', '')
+        
+        # Parse raw transcript data and prefer it for time range comparison as it should contain timestamps
+        if raw_transcript:
+            transcript_to_use = get_raw_transcript_data(raw_transcript)
+        else:
+            transcript_to_use = formatted_transcript
+        
+        if not transcript_to_use:
+            raise HTTPException(
+                status_code=400,
+                detail="No transcript available for this video"
+            )
+        
+        # Compare time ranges
+        comparison_result = await time_range_summary_service.compare_time_ranges(
+            transcript=transcript_to_use,
+            time_ranges=time_ranges,
+            video_title=video.get('title', '')
+        )
+        
+        return comparison_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error comparing time ranges: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Include the API router

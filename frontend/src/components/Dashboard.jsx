@@ -22,6 +22,7 @@ import {
   UserCircle,
   BookOpen,
   Target,
+  Clock,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -47,6 +48,8 @@ import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import VideoProcessSearch from './VideoProcessSearch';
+import TimeRangePicker from './TimeRangePicker';
+import TimeRangeSummary from './TimeRangeSummary';
 import { toast } from 'sonner';
 
 // Utility to format topics as badges
@@ -278,6 +281,70 @@ function VideoQA({ video }) {
   );
 }
 function VideoDetail({ open, onOpenChange, video }) {
+  const [timeline, setTimeline] = useState(null);
+  const [timeRangeSummaries, setTimeRangeSummaries] = useState([]);
+  const [isGeneratingTimeRange, setIsGeneratingTimeRange] = useState(false);
+  const [showTimeRangePicker, setShowTimeRangePicker] = useState(false);
+
+  // Load timeline when video is opened
+  useEffect(() => {
+    const loadTimeline = async () => {
+      if (!video?.id) return;
+      
+      try {
+        const result = await apiService.getVideoTimeline(video.id);
+        if (result.status === 'success') {
+          setTimeline(result);
+        }
+      } catch (error) {
+        console.error('Failed to load timeline:', error);
+      }
+    };
+    
+    if (open && video?.id) {
+      loadTimeline();
+    }
+  }, [open, video?.id]);
+
+  const handleTimeRangeSelect = async (rangeData) => {
+    if (!video?.id) return;
+    
+    try {
+      setIsGeneratingTimeRange(true);
+      
+      const result = await apiService.getTimeRangeSummary(
+        video.id, 
+        rangeData.start_time, 
+        rangeData.end_time
+      );
+      
+      if (result.status === 'success') {
+        // Use raw_summary for structured data if available, fallback to summary
+        const summaryData = result.raw_summary || result.summary;
+        const formattedContent = result.summary || result.formatted_summary;
+        
+        // Add both structured data and formatted content
+        const enhancedSummary = {
+          ...summaryData,
+          formatted_content: formattedContent
+        };
+        
+        setTimeRangeSummaries(prev => [enhancedSummary, ...prev]);
+        toast.success(`Summary generated for ${rangeData.start_time} - ${rangeData.end_time}`);
+      } else {
+        toast.error(result.error || 'Failed to generate time range summary');
+      }
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsGeneratingTimeRange(false);
+    }
+  };
+
+  const handleRemoveTimeRangeSummary = (index) => {
+    setTimeRangeSummaries(prev => prev.filter((_, i) => i !== index));
+  };
+
   if (!video) return null;
 
   return (
@@ -313,6 +380,7 @@ function VideoDetail({ open, onOpenChange, video }) {
               <TabsList>
                 <TabsTrigger value="summary">AI Analysis</TabsTrigger>
                 <TabsTrigger value="transcript">Transcript</TabsTrigger>
+                <TabsTrigger value="timerange">Time Range</TabsTrigger>
                 <TabsTrigger value="qa">Q&A</TabsTrigger>
               </TabsList>
             </div>
@@ -781,6 +849,102 @@ function VideoDetail({ open, onOpenChange, video }) {
                       📥 Download
                     </Button>
                   </div>
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* Time Range Tab */}
+            <TabsContent value="timerange" className="flex-1 overflow-hidden">
+              <ScrollArea className="h-[70vh] px-6 pr-8">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-8 bg-gradient-to-b from-purple-500 to-purple-600 rounded-full"></div>
+                      <h3 className="text-xl font-bold text-gray-900">Time Range Analysis</h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {timeline?.total_segments || 0} segments
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {timeline?.total_duration_formatted || '0:00'} total
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center py-4">
+                    <p className="text-gray-600 mb-4">
+                      Select a time range to generate a focused AI summary of that specific part of the video.
+                    </p>
+                    
+                    {!showTimeRangePicker ? (
+                      <Button
+                        onClick={() => setShowTimeRangePicker(true)}
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                      >
+                        <Clock className="h-4 w-4 mr-2" />
+                        Select Time Range
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowTimeRangePicker(false)}
+                        className="border-purple-200 text-purple-700"
+                      >
+                        Hide Time Picker
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Time Range Picker */}
+                  {showTimeRangePicker && timeline && (
+                    <TimeRangePicker
+                      timeline={timeline}
+                      onRangeSelect={handleTimeRangeSelect}
+                      isGenerating={isGeneratingTimeRange}
+                    />
+                  )}
+                  
+                  {/* Time Range Summaries */}
+                  {timeRangeSummaries.length > 0 && (
+                    <div className="space-y-4">
+                      <Separator />
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-lg font-semibold text-gray-900">
+                          Generated Summaries ({timeRangeSummaries.length})
+                        </h4>
+                      </div>
+                      
+                      {timeRangeSummaries.map((summary, index) => (
+                        <TimeRangeSummary
+                          key={index}
+                          summary={summary}
+                          onClose={() => handleRemoveTimeRangeSummary(index)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Getting Started Info */}
+                  {!timeline && (
+                    <Card className="text-center py-12">
+                      <CardContent>
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+                            <Clock className="h-8 w-8 text-purple-500" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                              Loading Timeline...
+                            </h3>
+                            <p className="text-gray-600">
+                              Analyzing video transcript to create timestamp segments
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </ScrollArea>
             </TabsContent>
@@ -1448,9 +1612,7 @@ export default function Dashboard() {
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (searchQuery !== '') {
-        handleSearch(searchQuery);
-      }
+      handleSearch(searchQuery);
     }, 500);
 
     return () => clearTimeout(timer);

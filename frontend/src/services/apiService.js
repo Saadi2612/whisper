@@ -199,5 +199,40 @@ export const apiService = {
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to refresh channel videos');
     }
+  },
+
+  // Get video timeline with timestamps
+  async getVideoTimeline(videoId) {
+    try {
+      const response = await apiClient.get(`/videos/${videoId}/timeline`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to get video timeline');
+    }
+  },
+
+  // Get time range summary
+  async getTimeRangeSummary(videoId, startTime, endTime) {
+    try {
+      const response = await apiClient.post(`/videos/${videoId}/time-range-summary`, {
+        start_time: startTime,
+        end_time: endTime
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to get time range summary');
+    }
+  },
+
+  // Compare multiple time ranges
+  async compareTimeRanges(videoId, timeRanges) {
+    try {
+      const response = await apiClient.post(`/videos/${videoId}/compare-time-ranges`, {
+        time_ranges: timeRanges
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to compare time ranges');
+    }
   }
 };

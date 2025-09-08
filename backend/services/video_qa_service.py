@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Dict, Any, List
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from .custom_llm import CustomLlmChat, UserMessage
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -49,11 +49,11 @@ Key Topics: {', '.join(video_analysis.get('topics', []))}
 """
 
             # Initialize chat with video context
-            chat = LlmChat(
+            chat = CustomLlmChat(
                 api_key=self.api_key,
                 session_id=f"qa_{hash(video_title + question[:50])}",
                 system_message=system_prompt
-            ).with_model("openai", "gpt-4o")
+            ).with_model("groq", "meta-llama/llama-4-scout-17b-16e-instruct")
 
             # Create contextual question prompt
             qa_prompt = f"""

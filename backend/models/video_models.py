@@ -107,7 +107,8 @@ class ProcessedVideo(BaseModel):
     thumbnail: Optional[str] = None
     published_at: str
     duration: Optional[str] = None
-    transcript: str
+    transcript: str  # Formatted transcript for display
+    raw_transcript: Optional[str] = None  # Raw transcript with timestamps
     analysis: VideoAnalysis
     chart_data: ChartData
     processed_at: datetime = Field(default_factory=datetime.utcnow)

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Play, FileText, Users, Clock, Target, BookOpen, Zap, Linkedin, Twitter, Youtube, UserCircle, LogOut } from 'lucide-react';
+import { Play, FileText, Users, Clock, Target, BookOpen, Zap, Linkedin, Twitter, Youtube, UserCircle, LogOut, AlertCircle } from 'lucide-react';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { mockData } from '../data/mockData';
 import VideoProcessSearch from './VideoProcessSearch';
@@ -14,6 +14,18 @@ const LandingPage = () => {
   const { user, logout, isAuthenticated } = useAuth();
   const [hoveredCard, setHoveredCard] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const location = useLocation();
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const hasShownPrompt = useRef(false);
+
+  // Check if user was redirected from a protected route
+  useEffect(() => {
+    if (location.state?.from && !hasShownPrompt.current) {
+      setShowLoginPrompt(true);
+      toast.info('Please sign in to access the dashboard');
+      hasShownPrompt.current = true;
+    }
+  }, [location.state]);
 
   const handleVideoProcessed = (video) => {
     console.log('Video processed:', video);
@@ -22,6 +34,26 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50">
+      {/* Login Prompt Banner */}
+      {/* {showLoginPrompt && !isAuthenticated && (
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white py-3 px-6">
+          <div className="container mx-auto flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <AlertCircle className="h-5 w-5" />
+              <span className="font-medium">Please sign in to access your dashboard</span>
+            </div>
+            <Button
+              onClick={() => setShowAuthModal(true)}
+              variant="secondary"
+              size="sm"
+              className="bg-white text-purple-600 hover:bg-gray-100"
+            >
+              Sign In
+            </Button>
+          </div>
+        </div>
+      )} */}
+
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -338,7 +370,12 @@ const LandingPage = () => {
       {/* Auth Modal */}
       <AuthModal 
         open={showAuthModal} 
-        onOpenChange={setShowAuthModal}
+        onOpenChange={(open) => {
+          setShowAuthModal(open);
+          if (!open) {
+            setShowLoginPrompt(false);
+          }
+        }}
       />
     </div>
   );

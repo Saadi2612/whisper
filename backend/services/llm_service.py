@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 from typing import Dict, Any, List, Optional
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from .custom_llm import CustomLlmChat, UserMessage
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -78,11 +78,11 @@ Return in this comprehensive JSON format:
 CRITICAL: Extract EVERYTHING. This should be a complete knowledge base, not a summary."""
 
             # Initialize chat with GPT-4o for superior analysis
-            chat = LlmChat(
+            chat = CustomLlmChat(
                 api_key=self.api_key,
                 session_id=f"deep_analysis_{hash(transcript[:200])}",
                 system_message=system_prompt
-            ).with_model("openai", "gpt-4o")
+            ).with_model("groq", "meta-llama/llama-4-scout-17b-16e-instruct")
 
             # Create comprehensive analysis prompt
             analysis_prompt = f"""
@@ -289,11 +289,11 @@ Provide your comprehensive analysis in the specified JSON format.
             # Use another LLM call to structure the response
             system_prompt = "You are a data formatter. Convert the given text into valid JSON format following the exact structure provided."
             
-            chat = LlmChat(
+            chat = CustomLlmChat(
                 api_key=self.api_key,
                 session_id=f"fallback_format_{hash(response_text[:100])}",
                 system_message=system_prompt
-            ).with_model("openai", "gpt-4o-mini")
+            ).with_model("groq", "meta-llama/llama-4-scout-17b-16e-instruct")
 
             format_prompt = f"""
 Convert this video analysis into valid JSON format:

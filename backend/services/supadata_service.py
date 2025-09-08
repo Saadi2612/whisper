@@ -51,6 +51,7 @@ class SuperdataService:
                         return {
                             'status': 'completed',
                             'content': formatted_transcript,
+                            'raw_content': data.get('content', ''),
                             'lang': data.get('lang', 'en'),
                             'available_langs': data.get('availableLangs', [])
                         }

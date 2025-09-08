@@ -34,15 +34,58 @@ class AuthService:
         }
         return jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
     
-    def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
+    async def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Verify JWT token and return payload"""
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            
+            # Check if token is blacklisted
+            if await self.is_token_blacklisted(token):
+                return None
+                
             return payload
         except jwt.ExpiredSignatureError:
             return None
         except jwt.InvalidTokenError:
             return None
+    
+    async def is_token_blacklisted(self, token: str) -> bool:
+        """Check if token is blacklisted"""
+        try:
+            blacklisted_token = await self.db.blacklisted_tokens.find_one({'token': token})
+            return blacklisted_token is not None
+        except Exception as e:
+            # If there's an error checking blacklist, assume token is valid for security
+            return False
+    
+    async def blacklist_token(self, token: str, user_id: str) -> bool:
+        """Add token to blacklist"""
+        try:
+            # Decode token to get expiration time
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm], options={"verify_exp": False})
+            exp_timestamp = payload.get('exp')
+            
+            blacklist_data = {
+                'token': token,
+                'user_id': user_id,
+                'blacklisted_at': datetime.utcnow(),
+                'expires_at': datetime.fromtimestamp(exp_timestamp) if exp_timestamp else None
+            }
+            
+            await self.db.blacklisted_tokens.insert_one(blacklist_data)
+            return True
+        except Exception as e:
+            return False
+    
+    async def cleanup_expired_blacklisted_tokens(self) -> int:
+        """Remove expired blacklisted tokens from database"""
+        try:
+            result = await self.db.blacklisted_tokens.delete_many({
+                'expires_at': {'$lt': datetime.utcnow()}
+            })
+            return result.deleted_count
+        except Exception as e:
+            return 0
     
     async def create_user(self, email: str, password: str, name: str) -> Dict[str, Any]:
         """Create new user account"""

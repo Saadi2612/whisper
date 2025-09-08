@@ -72,11 +72,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('whisper_token');
-    toast.success('Logged out successfully');
+  const logout = async () => {
+    try {
+      // Call logout API to blacklist the token
+      await apiService.logout();
+    } catch (error) {
+      // Don't show error to user, just log it
+      console.warn('Logout API call failed:', error);
+    } finally {
+      // Always clear local state regardless of API call result
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('whisper_token');
+      toast.success('Logged out successfully');
+    }
   };
 
   const value = {
