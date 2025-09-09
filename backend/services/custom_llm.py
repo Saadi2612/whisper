@@ -103,7 +103,7 @@ class CustomLlmChat:
                 data = await response.json()
                 content = data['choices'][0]['message']['content']
 
-                print('data:', data)
+                # print('data:', data)
                 print('content:', content)
                 
                 # Add assistant response to conversation history

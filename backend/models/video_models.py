@@ -63,6 +63,12 @@ class EnhancedVideoAnalysis(BaseModel):
     confidence_score: float = 0.85
 
 # Update existing VideoAnalysis to use enhanced version
+class ToneAnalysis(BaseModel):
+    overall_tone: str
+    delivery_style: str
+    audience_engagement: str
+    examples: List[str] = []
+
 class VideoAnalysis(BaseModel):
     executive_summary: str
     key_insights: List[str]
@@ -76,6 +82,7 @@ class VideoAnalysis(BaseModel):
     dynamic_sections: List[DynamicSection] = []
     entities: EntityData = EntityData()
     confidence_score: float = 0.85
+    tone_analysis: Optional[ToneAnalysis] = None
 
 class StockChartData(BaseModel):
     symbol: str

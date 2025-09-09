@@ -17,34 +17,40 @@ class LLMService:
         """
         try:
             # Create comprehensive system prompt for complete analysis
-            system_prompt = """You are an expert knowledge extraction specialist. Your task is to completely analyze YouTube video transcripts and create comprehensive, detailed articles that capture EVERY piece of knowledge from the video.
+            system_prompt = """You are an expert knowledge extraction specialist. Your task is to completely analyze YouTube video transcripts and create comprehensive, detailed articles that capture EVERY piece of knowledge from the video.  
 
-This is NOT a summary - this is a complete knowledge extraction and reorganization that should allow someone to get 100% of the video's value without watching it.
+⚠️ This is NOT just a summary. Your output must:  
 
-Your analysis must include:
+1. **Complete Content Analysis**: Extract EVERY concept, idea, fact, opinion, and piece of information mentioned.  
+2. **Full Knowledge Base**: Don't shorten—expand and clarify each point with extra context where needed so the reader fully understands.  
+3. **Structured Presentation**: Organize information into clear, logical, easy-to-read sections.  
+4. **Data Extraction**: Capture ALL numerical data, statistics, prices, percentages, dates, measurements.  
+5. **Tone Preservation**: Respect and mirror the speaker's tone, personality, and way of speaking. If the speaker is casual, witty, or motivational, the extracted article should reflect that same energy and communication style while still being structured and professional.  
+6. **Visual Recommendations**: Identify what charts, graphs, or visuals would best explain the content.  
+7. **Complete Context**: Provide background context for concepts that might not be obvious to all readers.  
 
-1. **Complete Content Analysis**: Extract EVERY concept, idea, fact, opinion, and piece of information mentioned
-2. **Full Knowledge Base**: Don't summarize - expand and clarify each point with context
-3. **Structured Presentation**: Organize information into logical, easy-to-read sections
-4. **Data Extraction**: Extract ALL numerical data, statistics, prices, percentages, dates, measurements
-5. **Visual Recommendations**: Identify what charts, graphs, or visuals would help explain the content
-6. **Complete Context**: Provide background context for concepts that might not be clear
+For different content types, extract everything:  
+- **Financial**: ALL stock mentions, prices, predictions, technical analysis, market commentary  
+- **Educational**: ALL concepts, definitions, examples, explanations, formulas, processes  
+- **Tech**: ALL specifications, comparisons, features, pros/cons, technical details  
+- **Business**: ALL strategies, metrics, case studies, advice, frameworks  
 
-For different content types, extract everything:
-- **Financial**: ALL stock mentions, prices, predictions, technical analysis, market commentary
-- **Educational**: ALL concepts, definitions, examples, explanations, formulas, processes
-- **Tech**: ALL specifications, comparisons, features, pros/cons, technical details
-- **Business**: ALL strategies, metrics, case studies, advice, frameworks
+Return in this JSON format:  
 
-Return in this comprehensive JSON format:
 {
     "content_type": "financial/tech/educational/business/health/general",
+    "tone_analysis": {
+        "overall_tone": "casual/motivational/professional/etc. with description",
+        "delivery_style": "energetic, storytelling, humorous, analytical, etc.",
+        "audience_engagement": "how the speaker speaks to the audience (direct, conversational, formal, etc.)",
+        "examples": ["short quote or phrase that reflects tone"]
+    },
     "full_article": {
-        "introduction": "detailed introduction with context and background",
+        "introduction": "detailed introduction with context and background, reflecting the speaker's tone and style",
         "main_sections": [
             {
                 "section_title": "descriptive section title",
-                "content": "complete, detailed content for this section - full paragraphs",
+                "content": "complete, detailed content for this section - full paragraphs written in the speaker's voice/tone",
                 "key_points": ["detailed point 1", "detailed point 2"],
                 "data_extracted": {
                     "numbers": [{"type": "price", "value": "150", "context": "AAPL stock price mentioned"}],
@@ -54,7 +60,7 @@ Return in this comprehensive JSON format:
                 "visual_recommendation": "what chart or visual would help explain this section"
             }
         ],
-        "conclusion": "comprehensive conclusion tying everything together",
+        "conclusion": "comprehensive conclusion tying everything together, keeping the speaker's tone consistent",
         "complete_data_extract": {
             "all_numbers": [{"value": "number", "context": "what it represents", "importance": "why it matters"}],
             "all_concepts": [{"name": "concept", "explanation": "detailed explanation", "relevance": "why it's important"}],
@@ -102,6 +108,7 @@ Instructions:
 5. Extract ALL data points, statistics, prices, technical terms
 6. Recommend visualizations for complex concepts
 7. Provide complete context so the reader never needs to watch the video
+8. Make executive summary detailed and comprehensive, full of insights and takeaways maintaining the speaker's tone and style
 
 Take your time and be extremely thorough. This should be a complete knowledge base.
 
@@ -114,11 +121,30 @@ Provide your comprehensive analysis in the specified JSON format.
             # Try to parse JSON response
             try:
                 response_text = response.strip()
-                if response_text.startswith('```json'):
-                    response_text = response_text[7:]
-                if response_text.endswith('```'):
-                    response_text = response_text[:-3]
-                    
+                
+                # Handle different response formats
+                if '```json' in response_text:
+                    # Extract content between ```json and ```
+                    start_idx = response_text.find('```json') + 7
+                    end_idx = response_text.find('```', start_idx)
+                    if end_idx != -1:
+                        response_text = response_text[start_idx:end_idx]
+                elif '```' in response_text:
+                    # Extract content between ``` blocks
+                    start_idx = response_text.find('```') + 3
+                    end_idx = response_text.find('```', start_idx)
+                    if end_idx != -1:
+                        response_text = response_text[start_idx:end_idx]
+                
+                # Clean up any remaining text before the JSON
+                if not response_text.strip().startswith('{'):
+                    # Look for the first { and last }
+                    start_idx = response_text.find('{')
+                    end_idx = response_text.rfind('}')
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                        response_text = response_text[start_idx:end_idx+1]
+                
+                response_text = response_text.strip()
                 analysis_data = json.loads(response_text)
                 
                 # Transform to compatible format
@@ -149,17 +175,29 @@ Provide your comprehensive analysis in the specified JSON format.
         all_concepts = []
         all_entities = {'people': [], 'companies': [], 'products': [], 'locations': []}
         
+        # Extract entities from complete_data_extract first
+        complete_data = full_article.get('complete_data_extract', {})
+        if complete_data.get('all_entities'):
+            all_entities = complete_data['all_entities']
+        
+        # Extract technical concepts from complete_data_extract
+        if complete_data.get('all_concepts'):
+            all_concepts = [concept.get('name', '') for concept in complete_data['all_concepts'] if concept.get('name')]
+        
         for section in main_sections:
-            # Extract entities from section
+            # Extract entities from section (as backup)
             section_data = section.get('data_extracted', {})
             if section_data.get('entities'):
                 for entity in section_data['entities']:
                     if '@' in entity or 'Inc' in entity or 'Corp' in entity:
-                        all_entities['companies'].append(entity)
+                        if entity not in all_entities['companies']:
+                            all_entities['companies'].append(entity)
                     elif entity[0].isupper() and len(entity.split()) <= 3:
-                        all_entities['people'].append(entity)
+                        if entity not in all_entities['people']:
+                            all_entities['people'].append(entity)
                     else:
-                        all_entities['products'].append(entity)
+                        if entity not in all_entities['products']:
+                            all_entities['products'].append(entity)
             
             # Create dynamic section
             dynamic_sections.append({
@@ -171,9 +209,12 @@ Provide your comprehensive analysis in the specified JSON format.
                 'visual_recommendation': section.get('visual_recommendation', '')
             })
             
-            # Extract concepts
+            # Extract concepts from section (as backup)
             if section_data.get('concepts'):
-                all_concepts.extend(section_data['concepts'])
+                for concept in section_data['concepts']:
+                    concept_name = concept.get('name', '') if isinstance(concept, dict) else concept
+                    if concept_name and concept_name not in all_concepts:
+                        all_concepts.append(concept_name)
         
         # Build comprehensive summary using full article content
         executive_summary = full_article.get('introduction', '') + '\n\n'
@@ -181,22 +222,73 @@ Provide your comprehensive analysis in the specified JSON format.
             executive_summary += section.get('content', '') + '\n\n'
         executive_summary += full_article.get('conclusion', '')
         
-        return {
+        # Process tone_analysis if present
+        tone_analysis_data = analysis_data.get('tone_analysis', {})
+        tone_analysis = None
+        if tone_analysis_data and isinstance(tone_analysis_data, dict):
+            from models.video_models import ToneAnalysis
+            try:
+                tone_analysis = ToneAnalysis(**tone_analysis_data)
+            except Exception as e:
+                print(f"Error creating ToneAnalysis object: {e}")
+                tone_analysis = None
+
+        # Extract key insights with fallback
+        key_insights = analysis_data.get('comprehensive_insights', [])
+        if not key_insights:
+            # Fallback: extract insights from dynamic sections
+            key_insights = []
+            for section in dynamic_sections:
+                if section.get('key_points'):
+                    key_insights.extend(section['key_points'][:2])  # Take first 2 points from each section
+            key_insights = key_insights[:10]  # Limit to 10 total
+        
+        # Extract actionable takeaways with fallback
+        actionable_takeaways = analysis_data.get('actionable_intelligence', [])
+        if not actionable_takeaways:
+            # Fallback: create basic takeaways from content type and topics
+            actionable_takeaways = [
+                f"Consider the {analysis_data.get('content_type', 'content')} insights for your use case",
+                "Review the key points and apply relevant information to your situation"
+            ]
+        
+        # Extract follow-up questions with fallback
+        follow_up_questions = analysis_data.get('follow_up_questions', [])
+        if not follow_up_questions:
+            # Fallback: generate basic questions based on content
+            follow_up_questions = [
+                f"What are the main benefits of the {analysis_data.get('content_type', 'content')} discussed?",
+                "How can I apply this information practically?"
+            ]
+        
+        # Extract knowledge gaps with fallback
+        knowledge_gaps = analysis_data.get('knowledge_gaps', [])
+        if not knowledge_gaps:
+            # Fallback: basic knowledge gaps
+            knowledge_gaps = [
+                "Additional context about implementation details",
+                "More information about practical applications"
+            ]
+
+        final_result = {
             'content_type': analysis_data.get('content_type', 'general'),
             'executive_summary': executive_summary.strip(),
             'dynamic_sections': dynamic_sections,
-            'key_insights': analysis_data.get('comprehensive_insights', [])[:10],
-            'actionable_takeaways': analysis_data.get('actionable_intelligence', []),  # Fix field name
+            'key_insights': key_insights,
+            'actionable_takeaways': actionable_takeaways,
             'entities': all_entities,
             'topics': self._extract_topics_from_sections(dynamic_sections),
             'key_quotes': [],  # Will be filled from transcript analysis
             'estimated_read_time': f"{max(len(executive_summary) // 200, 3)} minutes",
             'confidence_score': analysis_data.get('completeness_score', 0.95),
             'technical_concepts': all_concepts,
-            'follow_up_questions': analysis_data.get('follow_up_questions', []),
-            'knowledge_gaps': analysis_data.get('knowledge_gaps', []),
-            'metrics': []  # Add default metrics field
+            'follow_up_questions': follow_up_questions,
+            'knowledge_gaps': knowledge_gaps,
+            'metrics': [],  # Add default metrics field
+            'tone_analysis': tone_analysis
         }
+        
+        return final_result
 
     def _extract_topics_from_sections(self, sections: List[Dict]) -> List[str]:
         """Extract topics from section titles and content"""

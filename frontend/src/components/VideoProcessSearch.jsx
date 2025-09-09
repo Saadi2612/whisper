@@ -85,34 +85,36 @@ const VideoProcessSearch = ({ onVideoProcessed, stayOnPage = false }) => {
     try {
       setIsProcessing(true);
       
-      // If on home page, redirect to dashboard
+      // If on home page, redirect to dashboard without processing
       if (!stayOnPage) {
+        console.log('🔀 VideoProcessSearch: Navigating to dashboard without API call');
         navigate('/dashboard', { 
           state: { 
             processingVideo: inputValue,
             videoTitle: 'Processing your video...'
           }
         });
-      } else {
-        // If on dashboard, show processing notification
-        toast.info('🎥 Processing your video...');
-      }
-      
-      // Process video
-      const result = await apiService.processVideo(inputValue);
-      
-      if (result.status === 'success') {
-        if (stayOnPage) {
-          toast.success('🎉 Video analysis complete!');
-        }
-        
-        if (onVideoProcessed) {
-          onVideoProcessed(result.video);
-        }
-        
         setQuery('');
+        return; // Exit early, let Dashboard handle the processing
       } else {
-        toast.error(result.error || 'Failed to process video');
+        // If on dashboard, show processing notification and process video
+        toast.info('🎥 Processing your video...');
+        
+        // Process video
+        console.log('🎥 VideoProcessSearch: Calling API from dashboard');
+        const result = await apiService.processVideo(inputValue);
+        
+        if (result.status === 'success') {
+          toast.success('🎉 Video analysis complete!');
+          
+          if (onVideoProcessed) {
+            onVideoProcessed(result.video);
+          }
+          
+          setQuery('');
+        } else {
+          toast.error(result.error || 'Failed to process video');
+        }
       }
       
     } catch (error) {

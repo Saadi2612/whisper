@@ -218,7 +218,7 @@ async def process_channel_videos(channel_id: str, channel_name: str) -> List[Pro
                 )
                 
                 # Save to database
-                await db.processed_videos.insert_one(processed_video.dict())
+                await db.processed_videos.insert_one(processed_video.model_dump())
                 processed_videos.append(processed_video)
                 
                 logger.info(f"Successfully processed: {video_info['title']}")
@@ -496,6 +496,10 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
             }
         else:
             analysis_data = analysis_result['analysis']
+            print(f"🎭 Analysis data received from LLM service:")
+            print(f"   - tone_analysis present: {bool(analysis_data.get('tone_analysis'))}")
+            if analysis_data.get('tone_analysis'):
+                print(f"   - tone_analysis content: {analysis_data['tone_analysis']}")
         
         # Generate chart data - with fallback for new structure
         try:
@@ -528,6 +532,18 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
             raw_transcript = str(raw_transcript_data) if raw_transcript_data else ''
         
         # Create processed video object with real data
+        print(f"📊 Creating VideoAnalysis with data keys: {list(analysis_data.keys())}")
+        print(f"   - About to create VideoAnalysis with tone_analysis: {bool(analysis_data.get('tone_analysis'))}")
+        
+        try:
+            video_analysis = VideoAnalysis(**analysis_data)
+            print(f"✅ VideoAnalysis created successfully")
+            print(f"   - VideoAnalysis.tone_analysis: {video_analysis.tone_analysis}")
+        except Exception as e:
+            print(f"❌ Error creating VideoAnalysis: {e}")
+            print(f"   - Analysis data that failed: {analysis_data}")
+            raise
+        
         processed_video = ProcessedVideo(
             url=request.url,
             video_id=video_id,
@@ -539,15 +555,23 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
             duration=video_details.get('duration'),
             transcript=formatted_transcript,  # Use formatted transcript for display
             raw_transcript=raw_transcript,  # Save raw transcript with timestamps as string
-            analysis=VideoAnalysis(**analysis_data),
+            analysis=video_analysis,
             chart_data=ChartData(**chart_data),
             language=transcript_result['lang']
         )
         
         # Add user_id if authenticated
-        video_dict = processed_video.dict()
+        video_dict = processed_video.model_dump()  # Use Pydantic v2 method
         if user_id:
             video_dict['user_id'] = user_id
+        
+        # Debug the final video dict before saving
+        analysis_dict = video_dict.get('analysis', {})
+        print(f"💾 Final video_dict before database save:")
+        print(f"   - analysis keys: {list(analysis_dict.keys()) if analysis_dict else 'No analysis'}")
+        print(f"   - tone_analysis in final dict: {bool(analysis_dict.get('tone_analysis'))}")
+        if analysis_dict.get('tone_analysis'):
+            print(f"   - tone_analysis content: {analysis_dict['tone_analysis']}")
         
         # Save to database
         await db.processed_videos.insert_one(video_dict)
@@ -637,7 +661,7 @@ async def follow_channel(request: ChannelFollowRequest, background_tasks: Backgr
         )
         
         # Add user_id to the channel data
-        channel_dict = followed_channel.dict()
+        channel_dict = followed_channel.model_dump()
         channel_dict['user_id'] = effective_user_id
         
         # Save to database
@@ -761,7 +785,7 @@ async def follow_channel(request: ChannelFollowRequest, background_tasks: Backgr
         )
         
         # Save to database
-        await db.followed_channels.insert_one(followed_channel.dict())
+        await db.followed_channels.insert_one(followed_channel.model_dump())
         
         # Process recent videos from this channel in the background
         background_tasks.add_task(

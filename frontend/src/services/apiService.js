@@ -95,12 +95,15 @@ export const apiService = {
   // Process YouTube video
   async processVideo(url, language = 'en') {
     try {
+      console.log('🚀 API Service: processVideo called with URL:', url);
       const response = await apiClient.post('/videos/process', {
         url,
         language
       });
+      console.log('✅ API Service: processVideo response received');
       return response.data;
     } catch (error) {
+      console.error('❌ API Service: processVideo error:', error);
       throw new Error(error.response?.data?.detail || 'Failed to process video');
     }
   },

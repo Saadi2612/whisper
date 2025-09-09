@@ -87,7 +87,7 @@ class SchedulerService:
                     )
                     
                     # Add user_id to the video data
-                    video_dict = processed_video.dict()
+                    video_dict = processed_video.model_dump()  # Use Pydantic v2 method
                     video_dict['user_id'] = user_id
                     
                     # Save to database

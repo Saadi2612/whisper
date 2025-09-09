@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -285,6 +285,8 @@ function VideoDetail({ open, onOpenChange, video }) {
   const [timeRangeSummaries, setTimeRangeSummaries] = useState([]);
   const [isGeneratingTimeRange, setIsGeneratingTimeRange] = useState(false);
   const [showTimeRangePicker, setShowTimeRangePicker] = useState(false);
+
+  console.log('video', video);
 
   // Load timeline when video is opened
   useEffect(() => {
@@ -641,6 +643,93 @@ function VideoDetail({ open, onOpenChange, video }) {
                     </section>
                   )}
 
+                  {/* Tone Analysis */}
+                  {video.analysis?.tone_analysis && (
+                    <section>
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-2 h-8 bg-gradient-to-b from-amber-500 to-orange-500 rounded-full"></div>
+                        <h3 className="text-xl font-bold text-gray-900">Tone & Delivery Analysis</h3>
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Overall Tone Card */}
+                        <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200 hover:shadow-md transition-shadow">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                                <span className="text-amber-600 text-sm">🎭</span>
+                              </div>
+                              Overall Tone
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <p className="text-amber-800 font-medium text-base capitalize leading-6">
+                              {video.analysis.tone_analysis.overall_tone}
+                            </p>
+                          </CardContent>
+                        </Card>
+
+                        {/* Delivery Style Card */}
+                        <Card className="bg-gradient-to-br from-orange-50 to-red-50 border-orange-200 hover:shadow-md transition-shadow">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                                <span className="text-orange-600 text-sm">🎤</span>
+                              </div>
+                              Delivery Style
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <p className="text-orange-800 font-medium text-base capitalize leading-6">
+                              {video.analysis.tone_analysis.delivery_style}
+                            </p>
+                          </CardContent>
+                        </Card>
+
+                        {/* Audience Engagement Card */}
+                        <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 border-yellow-200 hover:shadow-md transition-shadow">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                                <span className="text-yellow-600 text-sm">👥</span>
+                              </div>
+                              Audience Engagement
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <p className="text-yellow-800 font-medium text-base capitalize leading-6">
+                              {video.analysis.tone_analysis.audience_engagement}
+                            </p>
+                          </CardContent>
+                        </Card>
+
+                        {/* Examples Card */}
+                        {video.analysis.tone_analysis.examples && video.analysis.tone_analysis.examples.length > 0 && (
+                          <Card className="bg-gradient-to-br from-red-50 to-pink-50 border-red-200 hover:shadow-md transition-shadow">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base flex items-center gap-2">
+                                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                                  <span className="text-red-600 text-sm">💬</span>
+                                </div>
+                                Example Phrases
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                              <div className="space-y-2">
+                                {video.analysis.tone_analysis.examples.map((example, i) => (
+                                  <div key={i} className="bg-white/60 rounded-lg p-3 border border-red-100">
+                                    <p className="text-red-800 text-sm italic leading-5">
+                                      "{example}"
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    </section>
+                  )}
+
                   {/* Actionable Items */}
                   {video.analysis?.actionable_items && video.analysis.actionable_items.length > 0 && (
                     <section>
@@ -737,6 +826,66 @@ function VideoDetail({ open, onOpenChange, video }) {
                                 <Bar dataKey="score" fill="#8b5cf6" radius={[6,6,0,0]} />
                               </BarChart>
                             </ResponsiveContainer>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </section>
+                  )}
+
+                  {/* Tone Analysis */}
+                  {video.analysis?.tone_analysis && (
+                    <section>
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-2 h-8 bg-gradient-to-b from-orange-500 to-red-500 rounded-full"></div>
+                        <h3 className="text-xl font-bold text-gray-900">Tone Analysis</h3>
+                      </div>
+                      <Card className="border-orange-200">
+                        <CardContent className="p-6">
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                  Overall Tone
+                                </h4>
+                                <p className="text-gray-600 text-sm bg-orange-50 p-3 rounded-lg">
+                                  {video.analysis.tone_analysis.overall_tone}
+                                </p>
+                              </div>
+                              <div className="space-y-2">
+                                <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                  Delivery Style
+                                </h4>
+                                <p className="text-gray-600 text-sm bg-orange-50 p-3 rounded-lg">
+                                  {video.analysis.tone_analysis.delivery_style}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+                                <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                Audience Engagement
+                              </h4>
+                              <p className="text-gray-600 text-sm bg-orange-50 p-3 rounded-lg">
+                                {video.analysis.tone_analysis.audience_engagement}
+                              </p>
+                            </div>
+                            {video.analysis.tone_analysis.examples && video.analysis.tone_analysis.examples.length > 0 && (
+                              <div className="space-y-2">
+                                <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                  Tone Examples
+                                </h4>
+                                <div className="space-y-2">
+                                  {video.analysis.tone_analysis.examples.map((example, index) => (
+                                    <div key={index} className="bg-orange-50 p-3 rounded-lg border-l-4 border-orange-400">
+                                      <p className="text-gray-700 text-sm italic">"{example}"</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -1460,6 +1609,7 @@ export default function Dashboard() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [processingState, setProcessingState] = useState(null);
+  const processedVideoRef = useRef(null);
 
   // Wait for auth to load before showing dashboard
   useEffect(() => {
@@ -1470,7 +1620,9 @@ export default function Dashboard() {
 
   // Check for processing state from navigation and start processing
   useEffect(() => {
-    if (location.state?.processingVideo) {
+    if (location.state?.processingVideo && !processingState && processedVideoRef.current !== location.state.processingVideo) {
+      console.log('🏠 Dashboard: Processing video from navigation state:', location.state.processingVideo);
+      processedVideoRef.current = location.state.processingVideo;
       setProcessingState({
         url: location.state.processingVideo,
         title: location.state.videoTitle || 'Processing video...',
@@ -1480,17 +1632,21 @@ export default function Dashboard() {
       // Start actual video processing
       const processVideo = async () => {
         try {
+          console.log('🎥 Dashboard: Calling API for processing video');
           const result = await apiService.processVideo(location.state.processingVideo);
           
           if (result.status === 'success') {
             handleVideoProcessed(result.video);
+            processedVideoRef.current = null; // Clear ref after successful processing
           } else {
             toast.error(result.error || 'Failed to process video');
             setProcessingState(null);
+            processedVideoRef.current = null; // Clear ref on error
           }
         } catch (error) {
           toast.error(error.message);
           setProcessingState(null);
+          processedVideoRef.current = null; // Clear ref on error
         }
       };
       
