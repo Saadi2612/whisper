@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -104,6 +104,108 @@ function VideoCard({ video, onOpen }) {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Sparkles className="h-4 w-4" />
           <span>AI summary • {video.analysis?.estimated_read_time || '3 min read'}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------
+// YouTube Video Card Component
+// ----------------------------------------------------
+function YouTubeVideoCard({ video, onProcess }) {
+  const formatTitle = (title) => {
+    return title.length > 80 ? title.substring(0, 80) + '...' : title;
+  };
+
+  const formatNumber = (num) => {
+    if (!num) return '0';
+    const number = parseInt(num);
+    if (number >= 1000000) {
+      return (number / 1000000).toFixed(1) + 'M';
+    } else if (number >= 1000) {
+      return (number / 1000).toFixed(1) + 'K';
+    }
+    return number.toString();
+  };
+
+  return (
+    <Card className="overflow-hidden hover:shadow-xl transition-all group h-full flex flex-col">
+      <div className="relative aspect-video w-full overflow-hidden">
+        <img 
+          src={video.thumbnail} 
+          alt={video.title} 
+          className="h-full w-full object-cover group-hover:scale-[1.02] transition-transform"
+          onError={(e) => {
+            e.target.src = 'https://images.unsplash.com/photo-1542831371-29b0f74f9713?q=80&w=1200&auto=format&fit=crop';
+          }}
+        />
+        <Badge className="absolute top-2 left-2 bg-black/70 text-white backdrop-blur">{video.published_at}</Badge>
+        <Badge className="absolute top-2 right-2 bg-red-600 text-white">{video.duration}</Badge>
+      </div>
+      <CardHeader className="pb-2 flex-1 flex flex-col">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-7 w-7">
+            <AvatarFallback>{video.channel?.name?.[0] || 'C'}</AvatarFallback>
+          </Avatar>
+          <div className="text-sm text-muted-foreground">{video.channel?.name}</div>
+        </div>
+        <CardTitle className="text-base leading-snug mt-1">{formatTitle(video.title)}</CardTitle>
+        {/* <CardDescription className="text-sm text-gray-600 line-clamp-2">
+          {video.description}
+        </CardDescription> */}
+        
+        {/* Tags */}
+        {/* {video.tags && video.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {video.tags.slice(0, 4).map((tag, i) => (
+              <Badge key={i} variant="secondary" className="text-xs capitalize">
+                {tag.replace(/-/g, ' ')}
+              </Badge>
+            ))}
+            {video.tags.length > 4 && (
+              <Badge variant="outline" className="text-xs">
+                +{video.tags.length - 4} more
+              </Badge>
+            )}
+          </div>
+        )} */}
+      </CardHeader>
+      <CardContent className="pt-0 mt-auto">
+        <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1">
+              <Users className="h-3 w-3" />
+              {formatNumber(video.view_count)} views
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-red-500">❤️</span>
+              {formatNumber(video.like_count)}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-blue-500">💬</span>
+              {formatNumber(video.comment_count)}
+            </span>
+          </div>
+        </div>
+        
+        <div className="flex gap-2">
+          <Button
+            onClick={() => onProcess(video)}
+            className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+            size="sm"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Process with AI
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(video.url, '_blank')}
+            className="border-gray-300"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -1211,6 +1313,13 @@ function MobileNavigation({
                   >
                     <ListChecks className="h-4 w-4 mr-3" />Queues
                   </Button>
+                  <Button 
+                    variant="ghost" 
+                    className={`w-full justify-start ${currentView === 'youtube' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' : 'text-gray-600 hover:bg-gray-50'}`}
+                    onClick={() => { onViewChange('youtube'); onClose(); }}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-3" />YouTube
+                  </Button>
                 </nav>
               </div>
 
@@ -1397,6 +1506,211 @@ function MyChannelsView({ followedChannels, onUnfollow, onAddChannel }) {
             </Card>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// YouTube Videos View Component
+// ----------------------------------------------------
+function YouTubeView({ 
+  youtubeVideos, 
+  youtubeSearchQuery, 
+  setYoutubeSearchQuery, 
+  isLoadingYoutube, 
+  setIsLoadingYoutube,
+  setYoutubeVideos,
+  youtubeSearchInfo,
+  setYoutubeSearchInfo,
+  isLoadingMoreYoutube,
+  setIsLoadingMoreYoutube,
+  onProcessVideo 
+}) {
+  const handleSearch = async (query, isLoadMore = false) => {
+    if (!query.trim()) return;
+    
+    try {
+      if (isLoadMore) {
+        setIsLoadingMoreYoutube(true);
+      } else {
+        setIsLoadingYoutube(true);
+      }
+      
+      const nextPageToken = isLoadMore ? youtubeSearchInfo?.next_page_token : null;
+      const result = await apiService.getYouTubeVideos(query, 1, 15, nextPageToken);
+      
+      if (isLoadMore) {
+        // Append new videos to existing list
+        setYoutubeVideos(prev => [...prev, ...(result.videos || [])]);
+      } else {
+        // Replace videos list for new search
+        setYoutubeVideos(result.videos || []);
+      }
+      
+      // Update search info with pagination data
+      setYoutubeSearchInfo(result.search_info || null);
+    } catch (error) {
+      toast.error('Failed to search YouTube videos');
+      console.error('YouTube search error:', error);
+    } finally {
+      if (isLoadMore) {
+        setIsLoadingMoreYoutube(false);
+      } else {
+        setIsLoadingYoutube(false);
+      }
+    }
+  };
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (youtubeSearchQuery.trim()) {
+        handleSearch(youtubeSearchQuery, false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [youtubeSearchQuery]);
+
+  // Infinite scroll handler
+  const handleScroll = useCallback(() => {
+    if (
+      window.innerHeight + document.documentElement.scrollTop >= 
+      document.documentElement.offsetHeight - 1000 && // Load more when 1000px from bottom
+      !isLoadingMoreYoutube && 
+      !isLoadingYoutube && 
+      youtubeSearchInfo?.next_page_token &&
+      youtubeSearchQuery.trim()
+    ) {
+      handleSearch(youtubeSearchQuery, true);
+    }
+  }, [isLoadingMoreYoutube, isLoadingYoutube, youtubeSearchInfo, youtubeSearchQuery]);
+
+  // Add scroll listener
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Discover YouTube Videos</h2>
+          <p className="text-gray-600">Search and process YouTube videos with AI analysis</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          <div className="text-sm text-gray-500">Live search</div>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <Card className="mb-6">
+        <CardContent className="p-6">
+          <div className="flex gap-3">
+            <div className="flex-1 relative">
+              <Input
+                placeholder="Search YouTube videos (e.g., 'python tutorial', 'cooking recipes')"
+                value={youtubeSearchQuery}
+                onChange={(e) => setYoutubeSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              {isLoadingYoutube && (
+                <Loader2 className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-purple-500" />
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            💡 Search for any topic to discover relevant YouTube videos and process them with AI
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Results */}
+      {youtubeVideos.length === 0 && !isLoadingYoutube ? (
+        <Card className="text-center py-12">
+          <CardContent>
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                <Search className="h-8 w-8 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {youtubeSearchQuery ? 'No videos found' : 'Search YouTube Videos'}
+                </h3>
+                <p className="text-gray-600">
+                  {youtubeSearchQuery 
+                    ? 'Try a different search term'
+                    : 'Enter a search term above to discover YouTube videos'
+                  }
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Search Info */}
+          {youtubeSearchInfo && (
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+              <div className="flex items-center gap-4">
+                <span>
+                  {youtubeSearchInfo.total_results?.toLocaleString()} videos found
+                </span>
+                <span>
+                  Showing {youtubeVideos.length} videos
+                </span>
+              </div>
+              {youtubeSearchInfo.next_page_token && (
+                <div className="flex items-center gap-2 text-purple-600">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                  <span>Scroll down for more</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Videos Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {youtubeVideos.map((video) => (
+              <motion.div
+                key={video.video_id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <YouTubeVideoCard 
+                  video={video} 
+                  onProcess={onProcessVideo}
+                />
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Loading More Indicator */}
+          {isLoadingMoreYoutube && (
+            <div className="flex justify-center py-8">
+              <Card className="px-6 py-4">
+                <CardContent className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+                  <span className="text-gray-600">Loading more videos...</span>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* End of Results */}
+          {youtubeSearchInfo && !youtubeSearchInfo.next_page_token && youtubeVideos.length > 0 && (
+            <div className="text-center py-8">
+              <div className="text-sm text-gray-500">
+                🎉 You've reached the end! No more videos to load.
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1595,6 +1909,11 @@ export default function Dashboard() {
   const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
   const location = useLocation();
   const [videos, setVideos] = useState([]);
+  const [youtubeVideos, setYoutubeVideos] = useState([]);
+  const [youtubeSearchQuery, setYoutubeSearchQuery] = useState('');
+  const [isLoadingYoutube, setIsLoadingYoutube] = useState(false);
+  const [youtubeSearchInfo, setYoutubeSearchInfo] = useState(null);
+  const [isLoadingMoreYoutube, setIsLoadingMoreYoutube] = useState(false);
   const [followedChannels, setFollowedChannels] = useState([]);
   const [stats, setStats] = useState(null);
   const [open, setOpen] = useState(false);
@@ -1602,7 +1921,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [currentView, setCurrentView] = useState('home'); // home, channels, topics, saved, queues
+  const [currentView, setCurrentView] = useState('home'); // home, channels, topics, saved, queues, youtube
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAddChannelModal, setShowAddChannelModal] = useState(false);
@@ -1796,6 +2115,26 @@ export default function Dashboard() {
     }
   };
 
+  // Handle YouTube video processing
+  const handleProcessYouTubeVideo = async (youtubeVideo) => {
+    try {
+      setCurrentView('home');
+      toast.info('Processing YouTube video...');
+      const result = await apiService.processVideo(youtubeVideo.url);
+      
+      if (result.status === 'success') {
+        handleVideoProcessed(result.video);
+        toast.success('YouTube video processed successfully!');
+        // Navigate to home view to show the processed video
+      } else {
+        toast.error(result.error || 'Failed to process YouTube video');
+      }
+    } catch (error) {
+      toast.error(error.message);
+      console.error('YouTube video processing error:', error);
+    }
+  };
+
   const openDetail = (video) => {
     setActive(video);
     setOpen(true);
@@ -1940,6 +2279,13 @@ export default function Dashboard() {
                 onClick={() => setCurrentView('queues')}
               >
                 <ListChecks className="h-4 w-4 mr-2" />Queues
+              </Button>
+              <Button 
+                variant="ghost" 
+                className={`w-full justify-start ${currentView === 'youtube' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' : 'text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => setCurrentView('youtube')}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />YouTube
               </Button>
               <Separator className="my-2" />
               <Button variant="ghost" className="w-full justify-start text-gray-600 hover:bg-gray-50">
@@ -2094,6 +2440,20 @@ export default function Dashboard() {
                 followedChannels={followedChannels} 
                 onUnfollow={handleUnfollowChannel}
                 onAddChannel={() => setShowAddChannelModal(true)}
+              />
+            ) : currentView === 'youtube' ? (
+              <YouTubeView
+                youtubeVideos={youtubeVideos}
+                youtubeSearchQuery={youtubeSearchQuery}
+                setYoutubeSearchQuery={setYoutubeSearchQuery}
+                isLoadingYoutube={isLoadingYoutube}
+                setIsLoadingYoutube={setIsLoadingYoutube}
+                setYoutubeVideos={setYoutubeVideos}
+                youtubeSearchInfo={youtubeSearchInfo}
+                setYoutubeSearchInfo={setYoutubeSearchInfo}
+                isLoadingMoreYoutube={isLoadingMoreYoutube}
+                setIsLoadingMoreYoutube={setIsLoadingMoreYoutube}
+                onProcessVideo={handleProcessYouTubeVideo}
               />
             ) : (
               <Card className="text-center py-12">

@@ -11,11 +11,13 @@ from datetime import datetime, timedelta
 import asyncio
 from typing import List, Optional, Dict, Any
 import re
+from pydantic import BaseModel
+from typing import List, Optional, Literal
 
 # Import services and models
 from services.supadata_service import SuperdataService
 from services.llm_service import LLMService
-from services.youtube_service import YouTubeService
+from services.youtube_service import YouTubeService, SearchType, SortOrder, Duration, UploadTime
 from services.auth_service import AuthService
 from services.scheduler_service import SchedulerService
 from services.video_qa_service import VideoQAService
@@ -74,6 +76,22 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+class SearchRequest(BaseModel):
+    query: str
+    search_type: Optional[Literal["topic", "phrase", "interest", "general"]] = "general"
+    max_results: Optional[int] = 10
+    sort_order: Optional[Literal["relevance", "date", "rating", "viewCount", "title"]] = "relevance"
+    duration: Optional[Literal["any", "short", "medium", "long"]] = "any"
+    upload_time: Optional[Literal["any", "hour", "today", "week", "month", "year"]] = "any"
+    safe_search: Optional[bool] = True
+    include_closed_captions: Optional[bool] = False
+    region_code: Optional[str] = "US"
+    language: Optional[str] = "en"
+
+class TrendingRequest(BaseModel):
+    category_id: Optional[str] = "0"  # 0 = All categories
+    region_code: Optional[str] = "US"
 
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[str]:
@@ -386,6 +404,43 @@ async def update_user_settings(settings: SettingsUpdate, user_id: str = Depends(
 async def root():
     return {"message": "Whisper Dashboard API is running"}
 
+@api_router.post("/search/youtube")
+async def search_videos_youtube(request: SearchRequest):
+    """
+    Advanced video search with multiple filters and search types
+    
+    Search Types:
+    - topic: Optimized for topic-based searches with educational modifiers
+    - phrase: Exact phrase matching
+    - interest: Expanded keyword search based on interest areas
+    - general: Standard search
+    
+    Sort Orders: relevance, date, rating, viewCount, title
+    Duration: any, short (<4min), medium (4-20min), long (>20min)
+    Upload Time: any, hour, today, week, month, year
+    """
+    try:
+        result = await youtube_service.search_videos_advanced(
+            query=request.query,
+            search_type=SearchType(request.search_type),
+            max_results=request.max_results,
+            sort_order=SortOrder(request.sort_order),
+            duration=Duration(request.duration),
+            upload_time=UploadTime(request.upload_time),
+            safe_search=request.safe_search,
+            include_closed_captions=request.include_closed_captions,
+            region_code=request.region_code,
+            language=request.language
+        )
+        
+        if result['status'] == 'error':
+            raise HTTPException(status_code=400, detail=result['error'])
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500)    
+
 @api_router.post("/videos/process", response_model=VideoProcessResponse)
 async def process_video(request: VideoProcessRequest, background_tasks: BackgroundTasks, user_id: str = Depends(optional_auth)):
     """Process a YouTube video to get transcript and AI analysis"""
@@ -560,10 +615,10 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
             language=transcript_result['lang']
         )
         
-        # Add user_id if authenticated
+        # Add user_id - use actual user_id if authenticated, otherwise use demo_user
         video_dict = processed_video.model_dump()  # Use Pydantic v2 method
-        if user_id:
-            video_dict['user_id'] = user_id
+        effective_user_id = user_id or "demo_user"
+        video_dict['user_id'] = effective_user_id
         
         # Debug the final video dict before saving
         analysis_dict = video_dict.get('analysis', {})
@@ -589,14 +644,18 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
 
 @api_router.get("/videos", response_model=VideoListResponse)
 async def get_videos(page: int = 1, limit: int = 20, user_id: str = Depends(optional_auth)):
-    """Get list of processed videos"""
+    """Get list of processed videos - public access for demo"""
     try:
         skip = (page - 1) * limit
         
-        # Filter by user if authenticated
+        # Use actual user_id if authenticated, otherwise use demo_user
+        effective_user_id = user_id or "demo_user"
+        
+        # Filter by user if authenticated, show all for demo users
         query_filter = {}
-        if user_id:
-            query_filter['user_id'] = user_id
+        if effective_user_id:  # Only filter if user is authenticated
+            query_filter['user_id'] = effective_user_id
+        # For demo users (no user_id), show all videos
         
         videos_cursor = db.processed_videos.find(query_filter).sort("processed_at", -1).skip(skip).limit(limit)
         videos_list = await videos_cursor.to_list(length=limit)
@@ -686,8 +745,8 @@ async def follow_channel(request: ChannelFollowRequest, background_tasks: Backgr
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/channels/following")
-async def get_following_channels(user_id: str = Depends(require_auth)):
-    """Get list of followed channels"""
+async def get_following_channels(user_id: str = Depends(optional_auth)):
+    """Get list of followed channels - public access for demo"""
     try:
         # Use demo_user for non-authenticated users
         effective_user_id = user_id or "demo_user"
@@ -704,25 +763,32 @@ async def get_following_channels(user_id: str = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/stats")
-async def get_user_stats(user_id: str = Depends(require_auth)):
-    """Get user statistics"""
+async def get_user_stats(user_id: str = Depends(optional_auth)):
+    """Get user statistics - public access for demo"""
     try:
         # Use demo_user for non-authenticated users
         effective_user_id = user_id or "demo_user"
         
         query_filter = {'user_id': effective_user_id}
         
-        total_videos = await db.processed_videos.count_documents(query_filter)
+        processed_videos = await db.processed_videos.find(query_filter).to_list(length=100)
         total_channels = await db.followed_channels.count_documents(query_filter)
+
+        total_duration = 0
+        for processed_video in processed_videos:
+            # print(f"Processed video duration: {processed_video.get('duration', 0)}")
+            cleaned_duration = processed_video.get('duration', 0)[:-1]
+            duration = int(cleaned_duration)
+            total_duration += duration
         
-        # Calculate estimated time saved (mock calculation)
-        estimated_hours = total_videos * 0.75  # Assume 45 minutes saved per video
+        # Calculate estimated time saved
+        estimated_hours = (total_duration / 60) * 0.75 # Consider that we saved 75% of the time, not all
         
         return {
-            "videos_processed": total_videos,
-            "hours_saved": f"{estimated_hours:.0f}h",
+            "videos_processed": len(processed_videos),
+            "hours_saved": f"{estimated_hours:.01f}h",
             "channels_followed": total_channels,
-            "total_transcripts": total_videos
+            "total_transcripts": len(processed_videos)
         }
         
     except Exception as e:
@@ -746,88 +812,18 @@ async def get_video(video_id: str):
         logger.error(f"Error getting video {video_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/channels/follow")
-async def follow_channel(request: ChannelFollowRequest, background_tasks: BackgroundTasks):
-    """Follow a YouTube channel and automatically process recent videos"""
-    try:
-        channel_url = request.channel_url.strip()
-        
-        # Extract channel identifier
-        channel_identifier = youtube_service.extract_channel_id_from_url(channel_url)
-        if not channel_identifier:
-            # If no ID found, try to use the URL as is or extract from end
-            if '@' in channel_url:
-                channel_identifier = channel_url.split('@')[-1]
-            else:
-                channel_identifier = channel_url.split('/')[-1]
-        
-        # Get real channel info from YouTube API
-        channel_info_result = await youtube_service.get_channel_info(channel_identifier)
-        
-        if channel_info_result['status'] != 'success':
-            raise HTTPException(status_code=400, detail=f"Failed to find channel: {channel_info_result.get('error')}")
-        
-        channel_info = channel_info_result['channel']
-        
-        # Check if already following
-        existing = await db.followed_channels.find_one({"channel_id": channel_info['id']})
-        if existing:
-            return {"status": "already_following", "channel": FollowedChannel(**existing)}
-        
-        # Create followed channel record
-        followed_channel = FollowedChannel(
-            channel_name=channel_info['name'],
-            channel_url=channel_url,
-            channel_id=channel_info['id'],
-            avatar_url=channel_info['avatar'],
-            subscriber_count=f"{int(channel_info['subscriber_count']):,} subscribers" if channel_info['subscriber_count'].isdigit() else channel_info['subscriber_count'],
-            video_count=int(channel_info['video_count']) if channel_info['video_count'].isdigit() else 0
-        )
-        
-        # Save to database
-        await db.followed_channels.insert_one(followed_channel.model_dump())
-        
-        # Process recent videos from this channel in the background
-        background_tasks.add_task(
-            process_channel_videos,
-            channel_info['id'],
-            channel_info['name']
-        )
-        
-        logger.info(f"Started processing videos for channel: {channel_info['name']}")
-        
-        return {"status": "success", "channel": followed_channel}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error following channel: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/channels/following")
-async def get_following_channels():
-    """Get list of followed channels"""
-    try:
-        channels_cursor = db.followed_channels.find().sort("followed_at", -1)
-        channels_list = await channels_cursor.to_list(length=100)
-        
-        channels = [FollowedChannel(**channel) for channel in channels_list]
-        
-        return {"channels": channels, "total": len(channels)}
-        
-    except Exception as e:
-        logger.error(f"Error getting followed channels: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/search/videos")
-async def search_videos(q: str, page: int = 1, limit: int = 20, user_id: str = Depends(require_auth)):
-    """Search processed videos"""
+async def search_videos(q: str, page: int = 1, limit: int = 20, user_id: str = Depends(optional_auth)):
+    """Search processed videos - public access for demo"""
     try:
         skip = (page - 1) * limit
         
-        # Create search query
+        # Use actual user_id if authenticated, otherwise search all videos
+        effective_user_id = user_id or "demo_user"
+        
+        # Create search query - filter by user if authenticated, search all for demo
         search_filter = {
-            "user_id": user_id,
             "$or": [
                 {"title": {"$regex": q, "$options": "i"}},
                 {"channel_name": {"$regex": q, "$options": "i"}},
@@ -835,6 +831,10 @@ async def search_videos(q: str, page: int = 1, limit: int = 20, user_id: str = D
                 {"analysis.executive_summary": {"$regex": q, "$options": "i"}}
             ]
         }
+        
+        # Add user filter if authenticated
+        if user_id:
+            search_filter["user_id"] = user_id
         
         videos_cursor = db.processed_videos.find(search_filter).sort("processed_at", -1).skip(skip).limit(limit)
         videos_list = await videos_cursor.to_list(length=limit)
@@ -884,26 +884,6 @@ async def refresh_videos_from_followed_channels(background_tasks: BackgroundTask
         logger.error(f"Error refreshing videos: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/stats")
-async def get_user_stats():
-    """Get user statistics"""
-    try:
-        total_videos = await db.processed_videos.count_documents({})
-        total_channels = await db.followed_channels.count_documents({})
-        
-        # Calculate estimated time saved (mock calculation)
-        estimated_hours = total_videos * 0.75  # Assume 45 minutes saved per video
-        
-        return {
-            "videos_processed": total_videos,
-            "hours_saved": f"{estimated_hours:.0f}h",
-            "channels_followed": total_channels,
-            "total_transcripts": total_videos
-        }
-        
-    except Exception as e:
-        logger.error(f"Error getting stats: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/videos/{video_id}/ask")
 async def ask_question_about_video(video_id: str, question: Dict[str, str], user_id: str = Depends(optional_auth)):

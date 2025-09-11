@@ -35,7 +35,7 @@ For different content types, extract everything:
 - **Tech**: ALL specifications, comparisons, features, pros/cons, technical details  
 - **Business**: ALL strategies, metrics, case studies, advice, frameworks  
 
-Return in this JSON format:  
+Return in this JSON format, and do not add any other text or comments before or after the JSON, I want pure JSON:  
 
 {
     "content_type": "financial/tech/educational/business/health/general",
@@ -121,6 +121,8 @@ Provide your comprehensive analysis in the specified JSON format.
             # Try to parse JSON response
             try:
                 response_text = response.strip()
+
+                print('\n\nResponse text:', response_text + '\n\n')
                 
                 # Handle different response formats
                 if '```json' in response_text:
@@ -182,7 +184,7 @@ Provide your comprehensive analysis in the specified JSON format.
         
         # Extract technical concepts from complete_data_extract
         if complete_data.get('all_concepts'):
-            all_concepts = [concept.get('name', '') for concept in complete_data['all_concepts'] if concept.get('name')]
+            all_concepts = complete_data['all_concepts']
         
         for section in main_sections:
             # Extract entities from section (as backup)

@@ -237,5 +237,30 @@ export const apiService = {
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to compare time ranges');
     }
+  },
+
+  // Get YouTube videos (search/discover)
+  async getYouTubeVideos(query = '', page = 1, limit = 15, nextPageToken = null) {
+    try {
+      const body = {
+        query,
+        search_type: "topic",
+        max_results: limit,
+        sort_order: "relevance",
+        duration: "medium",
+        upload_time: "month",
+        safe_search: true
+      };
+      
+      // Add pagination token if provided
+      if (nextPageToken) {
+        body.next_page_token = nextPageToken;
+      }
+      
+      const response = await apiClient.post('/search/youtube', body);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to fetch YouTube videos');
+    }
   }
 };
