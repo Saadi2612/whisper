@@ -779,10 +779,14 @@ async def get_user_stats(user_id: str = Depends(optional_auth)):
             # print(f"Processed video duration: {processed_video.get('duration', 0)}")
             cleaned_duration = processed_video.get('duration', 0)[:-1]
             duration = int(cleaned_duration)
+            print(f"Duration: {duration}")
             total_duration += duration
+        
+        print(f"Total duration: {total_duration}")
         
         # Calculate estimated time saved
         estimated_hours = (total_duration / 60) * 0.75 # Consider that we saved 75% of the time, not all
+        print(f"Estimated hours: {estimated_hours}")
         
         return {
             "videos_processed": len(processed_videos),
