@@ -8,21 +8,26 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
 import { Label } from './ui/label';
 import { Loader2, Mail, Lock, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import SignupPreferences from './SignupPreferences';
 
 const AuthModal = ({ open, onOpenChange }) => {
   const { login, register } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     name: '',
     confirmPassword: ''
   });
+  const [preferences, setPreferences] = useState(null);
   const [errors, setErrors] = useState({});
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    // Trim whitespace for email field
+    const processedValue = field === 'email' ? value.trim() : value;
+    setFormData(prev => ({ ...prev, [field]: processedValue }));
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
@@ -34,8 +39,13 @@ const AuthModal = ({ open, onOpenChange }) => {
 
     if (!formData.email) {
       newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+    } else {
+      // Trim and validate email
+      const trimmedEmail = formData.email.trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        newErrors.email = 'Please enter a valid email address';
+      }
     }
 
     if (!formData.password) {
@@ -62,7 +72,7 @@ const AuthModal = ({ open, onOpenChange }) => {
 
     setIsLoading(true);
     try {
-      const result = await login(formData.email, formData.password);
+      const result = await login(formData.email.trim(), formData.password);
       
       if (result.success) {
         onOpenChange(false);
@@ -83,34 +93,69 @@ const AuthModal = ({ open, onOpenChange }) => {
   const handleRegister = async () => {
     if (!validateForm(true)) return;
 
+    // Show preferences step instead of registering immediately
+    setShowPreferences(true);
+  };
+
+  const handlePreferencesComplete = async (userPreferences) => {
+    setPreferences(userPreferences);
     setIsLoading(true);
+    
     try {
-      const result = await register(formData.email, formData.password, formData.name);
+      const result = await register(
+        formData.email.trim(), 
+        formData.password, 
+        formData.name.trim(), 
+        userPreferences
+      );
       
       if (result.success) {
         onOpenChange(false);
         // Reset form
         setFormData({ email: '', password: '', name: '', confirmPassword: '' });
+        setPreferences(null);
+        setShowPreferences(false);
         // Navigate to dashboard
         navigate('/dashboard');
       } else {
         setErrors({ general: result.error });
+        setShowPreferences(false);
       }
     } catch (error) {
       setErrors({ general: 'Registration failed. Please try again.' });
+      setShowPreferences(false);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handlePreferencesBack = () => {
+    setShowPreferences(false);
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>Welcome to Whisper</SheetTitle>
-        </SheetHeader>
+        {showPreferences ? (
+          <div className="flex flex-col h-full">
+            <SheetHeader>
+              <SheetTitle>Welcome to Whisper</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 flex items-center justify-center">
+              <SignupPreferences
+                onBack={handlePreferencesBack}
+                onComplete={handlePreferencesComplete}
+                isLoading={isLoading}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            <SheetHeader>
+              <SheetTitle>Welcome to Whisper</SheetTitle>
+            </SheetHeader>
 
-        <div className="mt-6">
+            <div className="mt-6">
           <Tabs defaultValue="login" className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Sign In</TabsTrigger>
@@ -148,6 +193,9 @@ const AuthModal = ({ open, onOpenChange }) => {
                       />
                     </div>
                     {errors.email && <p className="text-sm text-red-600">{errors.email}</p>}
+                    {!errors.email && formData.email && (
+                      <p className="text-xs text-gray-500">We'll automatically clean up any extra spaces</p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -238,6 +286,9 @@ const AuthModal = ({ open, onOpenChange }) => {
                       />
                     </div>
                     {errors.email && <p className="text-sm text-red-600">{errors.email}</p>}
+                    {!errors.email && formData.email && (
+                      <p className="text-xs text-gray-500">We'll automatically clean up any extra spaces</p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -298,6 +349,8 @@ const AuthModal = ({ open, onOpenChange }) => {
             </TabsContent>
           </Tabs>
         </div>
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );

@@ -1,11 +1,24 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
+
+class UserPreferences(BaseModel):
+    # Signup preferences (required)
+    interests: List[str] = Field(default_factory=list)
+    age_group: Optional[str] = None
+    content_preference: Optional[str] = None
+    
+    # Profile preferences (optional)
+    location: Optional[str] = None
+    industry: Optional[str] = None
+    purchase_frequency: Optional[str] = None
+    product_goals: Optional[str] = None
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     name: str = Field(..., min_length=2)
+    preferences: Optional[UserPreferences] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -18,6 +31,8 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: datetime = Field(default_factory=datetime.utcnow)
     settings: Dict[str, Any] = Field(default_factory=dict)
+    preferences: Optional[UserPreferences] = None
+    profile_prompted: bool = False
 
 class UserResponse(BaseModel):
     status: str

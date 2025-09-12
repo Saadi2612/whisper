@@ -17,6 +17,8 @@ class SchedulerService:
         self.youtube_service = youtube_service
         self.is_running = False
         self.scheduler_thread = None
+        # Event loop that owns the async resources (set at startup)
+        self.loop: asyncio.AbstractEventLoop | None = None
     
     async def process_channel_videos_for_user(self, user_id: str, channel_id: str, channel_name: str) -> int:
         """Process recent videos from a channel for a specific user"""
@@ -143,6 +145,13 @@ class SchedulerService:
         if self.is_running:
             return
         
+        # Capture the running event loop (FastAPI's loop) so we can submit work to it from a thread
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Fallback: if called from non-async context (shouldn't happen in our startup hook)
+            self.loop = asyncio.get_event_loop()
+        
         self.is_running = True
         
         # Schedule hourly video refresh
@@ -173,10 +182,20 @@ class SchedulerService:
     def _run_async_refresh(self):
         """Wrapper to run async refresh in sync context"""
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.refresh_all_users_channels())
-            loop.close()
+            if not self.loop or self.loop.is_closed():
+                logger.error("Async refresh called without an active event loop reference")
+                return
+            # Submit coroutine to the main event loop from this background thread
+            future = asyncio.run_coroutine_threadsafe(
+                self.refresh_all_users_channels(), self.loop
+            )
+            # Optionally wait or add a done callback just to surface exceptions in logs
+            def _log_result(fut):
+                try:
+                    fut.result()
+                except Exception as exc:
+                    logger.error(f"Scheduled refresh task failed: {exc}")
+            future.add_done_callback(_log_result)
         except Exception as e:
             logger.error(f"Error in async refresh wrapper: {str(e)}")
     

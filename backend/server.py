@@ -30,7 +30,7 @@ from models.video_models import (
     VideoAnalysis, ChartData, ChartPoint, TimelinePoint, VideoMetric
 )
 from models.auth_models import (
-    UserRegister, UserLogin, User, UserResponse, UserSettings, SettingsUpdate
+    UserRegister, UserLogin, User, UserResponse, UserSettings, SettingsUpdate, UserPreferences
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -275,7 +275,8 @@ async def register_user(user_data: UserRegister):
         result = await auth_service.create_user(
             email=user_data.email,
             password=user_data.password,
-            name=user_data.name
+            name=user_data.name,
+            preferences=user_data.preferences.dict() if user_data.preferences else None
         )
         
         if result['status'] == 'success':
@@ -396,6 +397,63 @@ async def update_user_settings(settings: SettingsUpdate, user_id: str = Depends(
         
     except Exception as e:
         logger.error(f"Error updating settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Preferences Routes
+
+@api_router.get("/preferences")
+async def get_user_preferences(user_id: str = Depends(require_auth)):
+    """Get user preferences"""
+    try:
+        user = await auth_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {"status": "success", "preferences": user.get('preferences', {})}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting preferences: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/preferences")
+async def update_user_preferences(preferences: UserPreferences, user_id: str = Depends(require_auth)):
+    """Update user preferences"""
+    try:
+        from bson import ObjectId
+        
+        # Update user preferences and mark as prompted
+        await db.users.update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': {
+                'preferences': preferences.dict(),
+                'profile_prompted': True
+            }}
+        )
+        
+        return {"status": "success", "message": "Preferences updated"}
+        
+    except Exception as e:
+        logger.error(f"Error updating preferences: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/preferences/dismiss")
+async def dismiss_profile_prompt(user_id: str = Depends(require_auth)):
+    """Mark user as prompted without updating preferences"""
+    try:
+        from bson import ObjectId
+        
+        # Mark user as prompted
+        await db.users.update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': {'profile_prompted': True}}
+        )
+        
+        return {"status": "success", "message": "Profile prompt dismissed"}
+        
+    except Exception as e:
+        logger.error(f"Error dismissing profile prompt: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # API Routes

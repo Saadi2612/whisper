@@ -46,9 +46,13 @@ export const apiService = {
     }
   },
 
-  async register(email, password, name) {
+  async register(email, password, name, preferences = null) {
     try {
-      const response = await apiClient.post('/auth/register', { email, password, name });
+      const requestData = { email, password, name };
+      if (preferences) {
+        requestData.preferences = preferences;
+      }
+      const response = await apiClient.post('/auth/register', requestData);
       return response.data;
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Registration failed');
@@ -89,6 +93,34 @@ export const apiService = {
       return response.data;
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to update settings');
+    }
+  },
+
+  // Preferences
+  async getUserPreferences() {
+    try {
+      const response = await apiClient.get('/preferences');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to get preferences');
+    }
+  },
+
+  async updateUserPreferences(preferences) {
+    try {
+      const response = await apiClient.put('/preferences', preferences);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to update preferences');
+    }
+  },
+
+  async dismissProfilePrompt() {
+    try {
+      const response = await apiClient.post('/preferences/dismiss');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to dismiss profile prompt');
     }
   },
 

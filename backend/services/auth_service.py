@@ -87,7 +87,7 @@ class AuthService:
         except Exception as e:
             return 0
     
-    async def create_user(self, email: str, password: str, name: str) -> Dict[str, Any]:
+    async def create_user(self, email: str, password: str, name: str, preferences: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create new user account"""
         try:
             # Check if user exists
@@ -106,7 +106,17 @@ class AuthService:
                     'auto_process_channels': True,
                     'notification_email': True,
                     'process_frequency': 'hourly'
-                }
+                },
+                'preferences': preferences or {
+                    'interests': [],
+                    'age_group': None,
+                    'content_preference': None,
+                    'location': None,
+                    'industry': None,
+                    'purchase_frequency': None,
+                    'product_goals': None
+                },
+                'profile_prompted': False
             }
             
             result = await self.db.users.insert_one(user_data)
@@ -120,7 +130,8 @@ class AuthService:
                 'user': {
                     'id': user_id,
                     'email': email,
-                    'name': name
+                    'name': name,
+                    'preferences': preferences
                 },
                 'token': token
             }
@@ -168,7 +179,9 @@ class AuthService:
                     'id': str(user['_id']),
                     'email': user['email'],
                     'name': user['name'],
-                    'settings': user.get('settings', {})
+                    'settings': user.get('settings', {}),
+                    'preferences': user.get('preferences', {}),
+                    'profile_prompted': user.get('profile_prompted', False)
                 }
             return None
             

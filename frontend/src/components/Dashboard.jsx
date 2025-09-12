@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Bell,
@@ -1908,6 +1908,7 @@ function VideoProcessForm({ onVideoProcessed }) {
 export default function Dashboard() {
   const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
   const [youtubeVideos, setYoutubeVideos] = useState([]);
   const [youtubeSearchQuery, setYoutubeSearchQuery] = useState('');
@@ -2288,7 +2289,11 @@ export default function Dashboard() {
                 <ExternalLink className="h-4 w-4 mr-2" />YouTube
               </Button>
               <Separator className="my-2" />
-              <Button variant="ghost" className="w-full justify-start text-gray-600 hover:bg-gray-50">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start text-gray-600 hover:bg-gray-50"
+                onClick={() => navigate('/settings')}
+              >
                 <Settings className="h-4 w-4 mr-2" />Settings
               </Button>
             </nav>
