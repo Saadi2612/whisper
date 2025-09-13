@@ -48,6 +48,7 @@ import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import VideoProcessSearch from './VideoProcessSearch';
+import VideoTranslation from './VideoTranslation';
 import TimeRangePicker from './TimeRangePicker';
 import TimeRangeSummary from './TimeRangeSummary';
 import { toast } from 'sonner';
@@ -382,7 +383,7 @@ function VideoQA({ video }) {
     </div>
   );
 }
-function VideoDetail({ open, onOpenChange, video }) {
+function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdate }) {
   const [timeline, setTimeline] = useState(null);
   const [timeRangeSummaries, setTimeRangeSummaries] = useState([]);
   const [isGeneratingTimeRange, setIsGeneratingTimeRange] = useState(false);
@@ -391,20 +392,20 @@ function VideoDetail({ open, onOpenChange, video }) {
   console.log('video', video);
 
   // Load timeline when video is opened
-  useEffect(() => {
-    const loadTimeline = async () => {
-      if (!video?.id) return;
-      
-      try {
-        const result = await apiService.getVideoTimeline(video.id);
-        if (result.status === 'success') {
-          setTimeline(result);
-        }
-      } catch (error) {
-        console.error('Failed to load timeline:', error);
-      }
-    };
+  const loadTimeline = async () => {
+    if (!video?.id) return;
     
+    try {
+      const result = await apiService.getVideoTimeline(video.id);
+      if (result.status === 'success') {
+        setTimeline(result);
+      }
+    } catch (error) {
+      console.error('Failed to load timeline:', error);
+    }
+  };
+
+  useEffect(() => {
     if (open && video?.id) {
       loadTimeline();
     }
@@ -486,6 +487,7 @@ function VideoDetail({ open, onOpenChange, video }) {
                 <TabsTrigger value="transcript">Transcript</TabsTrigger>
                 <TabsTrigger value="timerange">Time Range</TabsTrigger>
                 <TabsTrigger value="qa">Q&A</TabsTrigger>
+                <TabsTrigger value="translation">Translation</TabsTrigger>
               </TabsList>
             </div>
 
@@ -999,7 +1001,7 @@ function VideoDetail({ open, onOpenChange, video }) {
 
             {/* Transcript Tab */}
             <TabsContent value="transcript" className="flex-1 overflow-hidden">
-              <ScrollArea className="h-[70vh] px-6 pr-8">
+              <ScrollArea className="h-[80vh] px-6 pr-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1204,6 +1206,17 @@ function VideoDetail({ open, onOpenChange, video }) {
             <TabsContent value="qa" className="flex-1 overflow-hidden">
               <ScrollArea className="h-[70vh] px-6 pr-8">
                 <VideoQA video={video} />
+              </ScrollArea>
+            </TabsContent>
+
+            {/* Translation Tab */}
+            <TabsContent value="translation" className="flex-1 overflow-hidden">
+              <ScrollArea className="h-[70vh] px-6 pr-8">
+                <VideoTranslation 
+                  video={video} 
+                  onVideoUpdate={onVideoUpdate}
+                  onTimelineUpdate={loadTimeline}
+                />
               </ScrollArea>
             </TabsContent>
           </Tabs>
@@ -2530,7 +2543,13 @@ export default function Dashboard() {
       </main>
 
       {/* Detail Drawer */}
-      <VideoDetail open={open} onOpenChange={setOpen} video={active} />
+      <VideoDetail 
+        open={open} 
+        onOpenChange={setOpen} 
+        video={active} 
+        onVideoUpdate={setActive}
+        onTimelineUpdate={() => {}} // Timeline is managed within VideoDetail
+      />
       
       {/* Add Channel Modal */}
       <AddChannelModal 

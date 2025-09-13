@@ -23,7 +23,9 @@ import {
   Shield,
   Save,
   Loader2,
-  ArrowLeft
+  ArrowLeft,
+  Globe,
+  Languages
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
@@ -43,7 +45,9 @@ const Settings = () => {
     location: '',
     industry: '',
     purchase_frequency: '',
-    product_goals: ''
+    product_goals: '',
+    // Language preferences
+    preferred_language: 'en'
   });
   const [settings, setSettings] = useState({
     auto_process_channels: true,
@@ -105,10 +109,14 @@ const Settings = () => {
     { value: 'weekly', label: 'Weekly' }
   ];
 
+  const [supportedLanguages, setSupportedLanguages] = useState([]);
+  const [isLoadingLanguages, setIsLoadingLanguages] = useState(false);
+
   useEffect(() => {
     if (isAuthenticated && user) {
       loadUserData();
     }
+    loadSupportedLanguages();
   }, [isAuthenticated, user]);
 
   const loadUserData = async () => {
@@ -128,7 +136,8 @@ const Settings = () => {
           location: '',
           industry: '',
           purchase_frequency: '',
-          product_goals: ''
+          product_goals: '',
+          preferred_language: 'en'
         });
       }
 
@@ -144,6 +153,21 @@ const Settings = () => {
       toast.error('Failed to load settings');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadSupportedLanguages = async () => {
+    setIsLoadingLanguages(true);
+    try {
+      const response = await apiService.getSupportedLanguages();
+      if (response.status === 'success') {
+        setSupportedLanguages(response.languages || []);
+      }
+    } catch (error) {
+      console.error('Error loading supported languages:', error);
+      toast.error('Failed to load supported languages');
+    } finally {
+      setIsLoadingLanguages(false);
     }
   };
 
@@ -175,6 +199,22 @@ const Settings = () => {
       }
     } catch (error) {
       toast.error('Failed to update preferences');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveLanguagePreference = async () => {
+    setIsSaving(true);
+    try {
+      const result = await apiService.updateUserLanguage(preferences.preferred_language);
+      if (result.status === 'success') {
+        toast.success('Language preference updated successfully');
+      } else {
+        toast.error(result.error || 'Failed to update language preference');
+      }
+    } catch (error) {
+      toast.error('Failed to update language preference');
     } finally {
       setIsSaving(false);
     }
@@ -441,6 +481,66 @@ const Settings = () => {
                   ))}
                 </RadioGroup>
                 <p className="text-sm text-gray-500">How often do you buy things in your main interests?</p>
+              </div>
+
+              <Separator />
+
+              {/* Language Preference */}
+              <div className="space-y-3">
+                <Label className="text-base font-medium flex items-center space-x-2">
+                  <Globe className="h-4 w-4 text-blue-500" />
+                  <span>Preferred Language</span>
+                </Label>
+                <Select
+                  value={preferences.preferred_language}
+                  onValueChange={(value) => handlePreferenceChange('preferred_language', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your preferred language" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {isLoadingLanguages ? (
+                      <SelectItem value="loading" disabled>
+                        <div className="flex items-center space-x-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Loading languages...</span>
+                        </div>
+                      </SelectItem>
+                    ) : (
+                      supportedLanguages.map((language) => (
+                        <SelectItem key={language.code} value={language.code}>
+                          <div className="flex items-center space-x-2">
+                            <Languages className="h-4 w-4" />
+                            <span>{language.name}</span>
+                            <span className="text-xs text-gray-500">({language.code})</span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-gray-500">
+                  Choose your preferred language for video transcripts and analysis. New videos will be processed in this language.
+                </p>
+                <Button 
+                  onClick={saveLanguagePreference} 
+                  disabled={isSaving}
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Language
+                    </>
+                  )}
+                </Button>
               </div>
 
               <Separator />

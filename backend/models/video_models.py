@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, HttpUrl
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, HttpUrl, field_validator
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 import uuid
 
@@ -80,9 +80,58 @@ class VideoAnalysis(BaseModel):
     estimated_read_time: str
     # Enhanced fields
     dynamic_sections: List[DynamicSection] = []
-    entities: EntityData = EntityData()
+    entities: Union[EntityData, Dict[str, Any], List[Any]] = EntityData()
     confidence_score: float = 0.85
     tone_analysis: Optional[ToneAnalysis] = None
+    
+    @field_validator('entities')
+    @classmethod
+    def validate_entities(cls, v):
+        """Convert various entity formats to EntityData"""
+        if isinstance(v, EntityData):
+            return v
+        
+        # Handle list format - convert to EntityData
+        if isinstance(v, list):
+            entities_data = EntityData()
+            for entity in v:
+                if isinstance(entity, dict):
+                    name = entity.get('name', '')
+                    entity_type = entity.get('role', entity.get('type', 'people')).lower()
+                    
+                    # Map entity types to EntityData fields
+                    if 'company' in entity_type or 'corporation' in entity_type or 'business' in entity_type:
+                        if name and name not in entities_data.companies:
+                            entities_data.companies.append(name)
+                    elif 'product' in entity_type or 'device' in entity_type or 'tool' in entity_type:
+                        if name and name not in entities_data.products:
+                            entities_data.products.append(name)
+                    elif 'location' in entity_type or 'place' in entity_type or 'country' in entity_type or 'city' in entity_type:
+                        if name and name not in entities_data.locations:
+                            entities_data.locations.append(name)
+                    else:  # Default to people
+                        if name and name not in entities_data.people:
+                            entities_data.people.append(name)
+                elif isinstance(entity, str):
+                    # Simple string entity - default to people
+                    if entity not in entities_data.people:
+                        entities_data.people.append(entity)
+            return entities_data
+        
+        # Handle dict format - convert to EntityData
+        if isinstance(v, dict):
+            if hasattr(v, 'people'):  # Already an EntityData object
+                return v
+            else:
+                return EntityData(
+                    people=v.get('people', []),
+                    companies=v.get('companies', []),
+                    products=v.get('products', []),
+                    locations=v.get('locations', [])
+                )
+        
+        # Fallback to empty EntityData
+        return EntityData()
 
 class StockChartData(BaseModel):
     symbol: str
@@ -121,6 +170,7 @@ class ProcessedVideo(BaseModel):
     processed_at: datetime = Field(default_factory=datetime.utcnow)
     status: str = Field(default="completed")
     language: str = Field(default="en")
+    original_language: str = Field(default="en")
 
 class VideoListResponse(BaseModel):
     videos: List[ProcessedVideo]

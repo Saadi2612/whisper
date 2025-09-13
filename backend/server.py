@@ -24,6 +24,7 @@ from services.video_qa_service import VideoQAService
 from services.transcript_formatter import TranscriptFormatterService
 from services.timestamp_service import TimestampService
 from services.time_range_summary_service import TimeRangeSummaryService
+from services.translation_service import TranslationService
 from models.video_models import (
     VideoProcessRequest, ProcessedVideo, VideoListResponse, 
     VideoProcessResponse, ChannelFollowRequest, FollowedChannel, SearchQuery,
@@ -51,6 +52,7 @@ qa_service = VideoQAService()
 transcript_formatter = TranscriptFormatterService()
 timestamp_service = TimestampService()
 time_range_summary_service = TimeRangeSummaryService()
+translation_service = TranslationService()
 
 # Security
 security = HTTPBearer(auto_error=False)
@@ -438,6 +440,37 @@ async def update_user_preferences(preferences: UserPreferences, user_id: str = D
         logger.error(f"Error updating preferences: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.put("/preferences/language")
+async def update_user_language(language_data: Dict[str, str], user_id: str = Depends(require_auth)):
+    """Update user's preferred language"""
+    try:
+        from bson import ObjectId
+        
+        preferred_language = language_data.get('preferred_language', 'en')
+        
+        # Validate language code
+        supported_languages = [lang['code'] for lang in translation_service.get_supported_languages()]
+        if preferred_language not in supported_languages:
+            raise HTTPException(status_code=400, detail=f"Unsupported language code: {preferred_language}")
+        
+        # Update user's language preference
+        await db.users.update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': {'preferences.preferred_language': preferred_language}}
+        )
+        
+        return {
+            "status": "success", 
+            "message": f"Language preference updated to {preferred_language}",
+            "preferred_language": preferred_language
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating language preference: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.post("/preferences/dismiss")
 async def dismiss_profile_prompt(user_id: str = Depends(require_auth)):
     """Mark user as prompted without updating preferences"""
@@ -461,6 +494,239 @@ async def dismiss_profile_prompt(user_id: str = Depends(require_auth)):
 @api_router.get("/")
 async def root():
     return {"message": "Whisper Dashboard API is running"}
+
+# Translation Routes
+
+@api_router.get("/languages")
+async def get_supported_languages():
+    """Get list of supported languages for translation"""
+    try:
+        languages = translation_service.get_supported_languages()
+        return {"status": "success", "languages": languages}
+    except Exception as e:
+        logger.error(f"Error getting supported languages: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/videos/{video_id}/translate")
+async def translate_video(video_id: str, target_language: str, user_id: str = Depends(optional_auth)):
+    """Translate a processed video to the target language"""
+    try:
+        # Find the video
+        query_filter = {"id": video_id}
+        if user_id:
+            query_filter["user_id"] = user_id
+        
+        logger.info(f"Searching for video with query: {query_filter}")
+        video = await db.processed_videos.find_one(query_filter)
+        
+        if not video:
+            logger.error(f"Video not found with query: {query_filter}")
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        logger.info(f"Found video: {video.get('title', 'Unknown')}")
+        logger.info(f"Video analysis type: {type(video.get('analysis'))}")
+        logger.info(f"Video analysis keys: {list(video.get('analysis', {}).keys()) if video.get('analysis') else 'No analysis'}")
+        
+        # Check if already translated to this language
+        if video.get('language') == target_language:
+            return {
+                "status": "success",
+                "message": "Video is already in the requested language",
+                "video": ProcessedVideo(**video)
+            }
+        
+        # Translate the video content
+        logger.info(f"Starting translation for video {video_id} to {target_language}")
+        logger.info(f"Video data keys: {list(video.keys())}")
+        logger.info(f"Video analysis type: {type(video.get('analysis'))}")
+        translation_result = await translation_service.translate_video_content(video, target_language)
+        
+        if translation_result['status'] != 'success':
+            logger.error(f"Translation failed for video {video_id}: {translation_result['error']}")
+            raise HTTPException(status_code=500, detail=translation_result['error'])
+        
+        translated_content = translation_result['translated_content']
+        
+        # Update the existing video record with translated content
+        from bson import ObjectId
+        
+        # Merge translated analysis with existing analysis to preserve required fields
+        existing_analysis = video.get('analysis', {})
+        translated_analysis = translated_content.get('analysis', {})
+        merged_analysis = {**existing_analysis, **translated_analysis}
+        
+        update_data = {
+            'title': translated_content.get('title', video['title']),
+            'channel_name': translated_content.get('channel_name', video['channel_name']),
+            'transcript': translated_content.get('transcript', video['transcript']),
+            'analysis': merged_analysis,
+            'language': target_language,
+            'original_language': video.get('language', 'en'),
+            'translated_at': datetime.utcnow()
+        }
+        
+        # Update the video in database
+        await db.processed_videos.update_one(
+            {'_id': ObjectId(video['_id'])},
+            {'$set': update_data}
+        )
+        
+        # Get the updated video
+        updated_video = await db.processed_videos.find_one({'_id': ObjectId(video['_id'])})
+        
+        logger.info(f"Video {video_id} translated to {target_language}")
+        logger.info(f"Updated video keys: {list(updated_video.keys()) if updated_video else 'No video found'}")
+        
+        try:
+            # Convert to ProcessedVideo model
+            processed_video = ProcessedVideo(**updated_video)
+            logger.info("Successfully created ProcessedVideo object")
+            
+            return {
+                "status": "success",
+                "message": f"Video translated to {target_language}",
+                "video": processed_video
+            }
+        except Exception as e:
+            logger.error(f"Error creating ProcessedVideo object: {str(e)}")
+            logger.error(f"Updated video data: {updated_video}")
+            raise HTTPException(status_code=500, detail=f"Failed to create video object: {str(e)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error translating video: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/videos/{video_id}/translate-analysis")
+async def translate_video_analysis(video_id: str, target_language: str, user_id: str = Depends(optional_auth)):
+    """Translate only the analysis portion of a video"""
+    try:
+        # Find the video
+        query_filter = {"id": video_id}
+        if user_id:
+            query_filter["user_id"] = user_id
+        
+        video = await db.processed_videos.find_one(query_filter)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Translate the analysis
+        translation_result = await translation_service.translate_analysis_only(
+            video.get('analysis', {}), 
+            target_language
+        )
+        
+        if translation_result['status'] != 'success':
+            raise HTTPException(status_code=500, detail=translation_result['error'])
+        
+        translated_analysis = translation_result['translated_analysis']
+
+        # Merge translated analysis with existing analysis to preserve required fields
+        existing_analysis = video.get('analysis', {})
+        merged_analysis = {**existing_analysis, **translated_analysis}
+
+        # Update the existing video record with translated analysis
+        from bson import ObjectId
+        
+        update_data = {
+            'analysis': merged_analysis,
+            'translated_at': datetime.utcnow()
+        }
+        
+        await db.processed_videos.update_one(
+            {'_id': ObjectId(video['_id'])},
+            {'$set': update_data}
+        )
+        
+        # Get the updated video
+        updated_video = await db.processed_videos.find_one({'_id': ObjectId(video['_id'])})
+        
+        try:
+            processed_video = ProcessedVideo(**updated_video)
+            return {
+                "status": "success",
+                "message": f"Analysis translated to {target_language}",
+                "analysis": translated_analysis,
+                "video": processed_video
+            }
+        except Exception as e:
+            logger.error(f"Error creating ProcessedVideo object for analysis translation: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to create video object: {str(e)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error translating analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/videos/{video_id}/translate-transcript")
+async def translate_video_transcript(video_id: str, target_language: str, user_id: str = Depends(optional_auth)):
+    """Translate only the transcript of a video"""
+    try:
+        # Find the video
+        query_filter = {"id": video_id}
+        if user_id:
+            query_filter["user_id"] = user_id
+        
+        video = await db.processed_videos.find_one(query_filter)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Translate the transcript
+        translation_result = await translation_service.translate_transcript_only(
+            video.get('transcript', ''), 
+            target_language
+        )
+        
+        if translation_result['status'] != 'success':
+            raise HTTPException(status_code=500, detail=translation_result['error'])
+        
+        translated_transcript = translation_result['translated_transcript']
+
+        format_result = await transcript_formatter.format_transcript(translated_transcript)
+        
+        if format_result['status'] != 'success':
+            raise HTTPException(status_code=500, detail=format_result['error'])
+        
+        formatted_transcript = format_result['formatted_transcript']
+
+        # Update the existing video record with translated transcript
+        from bson import ObjectId
+        
+        update_data = {
+            'transcript': formatted_transcript,
+            'raw_transcript': translated_transcript,
+            'translated_at': datetime.utcnow()
+        }
+        
+        await db.processed_videos.update_one(
+            {'_id': ObjectId(video['_id'])},
+            {'$set': update_data}
+        )
+        
+        # Get the updated video
+        updated_video = await db.processed_videos.find_one({'_id': ObjectId(video['_id'])})
+        
+        try:
+            processed_video = ProcessedVideo(**updated_video)
+            return {
+                "status": "success",
+                "message": f"Transcript translated to {target_language}",
+                "transcript": formatted_transcript,
+                "video": processed_video
+            }
+        except Exception as e:
+            logger.error(f"Error creating ProcessedVideo object for transcript translation: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to create video object: {str(e)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error translating transcript: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/search/youtube")
 async def search_videos_youtube(request: SearchRequest):
@@ -523,6 +789,18 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
         
         logger.info(f"Processing video: {request.url}")
         
+        # Get user's language preference if authenticated
+        user_language = request.language or "en"  # Default to English
+        if user_id:
+            try:
+                user = await auth_service.get_user_by_id(user_id)
+                if user and user.get('preferences', {}).get('preferred_language'):
+                    print(f"User preferences: {user['preferences']}")
+                    user_language = user['preferences']['preferred_language']
+                    print(f"User language preference: {user_language}")
+            except Exception as e:
+                logger.warning(f"Could not get user language preference: {str(e)}")
+        
         # Get video info from YouTube API first
         try:
             # Extract video ID and get video details
@@ -553,10 +831,10 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
                 'avatar': 'https://i.pravatar.cc/100?img=1'
             }
         
-        # Get transcript from Supadata
+        # Get transcript from Supadata using user's preferred language
         transcript_result = await supadata_service.get_video_transcript(
             request.url, 
-            lang=request.language, 
+            lang=user_language, 
             text=False  # Get timestamped version
         )
 
@@ -594,6 +872,7 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
         if analysis_result['status'] != 'success':
             # Create basic analysis if comprehensive analysis fails
             logger.warning(f"Comprehensive analysis failed, creating basic analysis: {analysis_result.get('error')}")
+            from models.video_models import EntityData
             analysis_data = {
                 'content_type': 'general',
                 'executive_summary': f"Analysis of video '{video_details.get('title', 'Unknown Title')}' from {channel_info.get('name', 'Unknown Channel')}. The video content has been transcribed and is available for viewing.",
@@ -604,7 +883,7 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
                 'actionable_takeaways': ['Watch the video or read the transcript for more insights'],
                 'estimated_read_time': '3 minutes',
                 'dynamic_sections': [],
-                'entities': {'people': [], 'companies': [], 'products': [], 'locations': []},
+                'entities': EntityData(),
                 'confidence_score': 0.7
             }
         else:
@@ -648,6 +927,51 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
         print(f"📊 Creating VideoAnalysis with data keys: {list(analysis_data.keys())}")
         print(f"   - About to create VideoAnalysis with tone_analysis: {bool(analysis_data.get('tone_analysis'))}")
         
+        # Fix entities format if needed - handle case where LLM returns list instead of EntityData
+        entities_data = analysis_data.get('entities')
+        if entities_data and not hasattr(entities_data, 'people'):  # Check if it's not an EntityData object
+            print(f"🔧 Fixing entities format: {type(entities_data)}")
+            from models.video_models import EntityData
+            
+            if isinstance(entities_data, list):
+                # Convert list of {name, role/type} to EntityData structure
+                fixed_entities = EntityData()
+                for entity in entities_data:
+                    if isinstance(entity, dict):
+                        name = entity.get('name', '')
+                        entity_type = entity.get('role', entity.get('type', 'people')).lower()
+                        
+                        # Map entity types to EntityData fields
+                        if 'company' in entity_type or 'corporation' in entity_type or 'business' in entity_type:
+                            if name not in fixed_entities.companies:
+                                fixed_entities.companies.append(name)
+                        elif 'product' in entity_type or 'device' in entity_type or 'tool' in entity_type:
+                            if name not in fixed_entities.products:
+                                fixed_entities.products.append(name)
+                        elif 'location' in entity_type or 'place' in entity_type or 'country' in entity_type or 'city' in entity_type:
+                            if name not in fixed_entities.locations:
+                                fixed_entities.locations.append(name)
+                        else:  # Default to people
+                            if name not in fixed_entities.people:
+                                fixed_entities.people.append(name)
+                    elif isinstance(entity, str):
+                        # Simple string entity - default to people
+                        if entity not in fixed_entities.people:
+                            fixed_entities.people.append(entity)
+                
+                analysis_data['entities'] = fixed_entities
+                print(f"✅ Entities converted from list to EntityData structure")
+            elif isinstance(entities_data, dict) and not hasattr(entities_data, 'people'):
+                # Convert dict to EntityData
+                from models.video_models import EntityData
+                analysis_data['entities'] = EntityData(
+                    people=entities_data.get('people', []),
+                    companies=entities_data.get('companies', []),
+                    products=entities_data.get('products', []),
+                    locations=entities_data.get('locations', [])
+                )
+                print(f"✅ Entities converted from dict to EntityData structure")
+        
         try:
             video_analysis = VideoAnalysis(**analysis_data)
             print(f"✅ VideoAnalysis created successfully")
@@ -655,6 +979,10 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
         except Exception as e:
             print(f"❌ Error creating VideoAnalysis: {e}")
             print(f"   - Analysis data that failed: {analysis_data}")
+            # Print specific entity data for debugging
+            if 'entities' in analysis_data:
+                print(f"   - Entities data type: {type(analysis_data['entities'])}")
+                print(f"   - Entities data: {analysis_data['entities']}")
             raise
         
         processed_video = ProcessedVideo(
@@ -670,7 +998,7 @@ async def process_video(request: VideoProcessRequest, background_tasks: Backgrou
             raw_transcript=raw_transcript,  # Save raw transcript with timestamps as string
             analysis=video_analysis,
             chart_data=ChartData(**chart_data),
-            language=transcript_result['lang']
+            language=user_language  # Use user's preferred language
         )
         
         # Add user_id - use actual user_id if authenticated, otherwise use demo_user

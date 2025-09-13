@@ -28,6 +28,7 @@ class LLMService:
 5. **Tone Preservation**: Respect and mirror the speaker's tone, personality, and way of speaking. If the speaker is casual, witty, or motivational, the extracted article should reflect that same energy and communication style while still being structured and professional.  
 6. **Visual Recommendations**: Identify what charts, graphs, or visuals would best explain the content.  
 7. **Complete Context**: Provide background context for concepts that might not be obvious to all readers.  
+8. **Transcription Language**: Give the result in the language of the transcription. Keep the field names in english as they are. Just provide the content in the language of the transcription.
 
 For different content types, extract everything:  
 - **Financial**: ALL stock mentions, prices, predictions, technical analysis, market commentary  
@@ -180,7 +181,20 @@ Provide your comprehensive analysis in the specified JSON format.
         # Extract entities from complete_data_extract first
         complete_data = full_article.get('complete_data_extract', {})
         if complete_data.get('all_entities'):
-            all_entities = complete_data['all_entities']
+            entities_data = complete_data['all_entities']
+            # Ensure entities is a dictionary with proper structure
+            if isinstance(entities_data, dict):
+                all_entities = entities_data
+            else:
+                # Convert list to proper EntityData structure
+                all_entities = {'people': [], 'companies': [], 'products': [], 'locations': []}
+                if isinstance(entities_data, list):
+                    for entity in entities_data:
+                        if isinstance(entity, dict):
+                            entity_name = entity.get('name', '')
+                            entity_type = entity.get('type', 'people')
+                            if entity_name and entity_type in all_entities:
+                                all_entities[entity_type].append(entity_name)
         
         # Extract technical concepts from complete_data_extract
         if complete_data.get('all_concepts'):
@@ -191,15 +205,24 @@ Provide your comprehensive analysis in the specified JSON format.
             section_data = section.get('data_extracted', {})
             if section_data.get('entities'):
                 for entity in section_data['entities']:
-                    if '@' in entity or 'Inc' in entity or 'Corp' in entity:
-                        if entity not in all_entities['companies']:
-                            all_entities['companies'].append(entity)
-                    elif entity[0].isupper() and len(entity.split()) <= 3:
-                        if entity not in all_entities['people']:
-                            all_entities['people'].append(entity)
-                    else:
-                        if entity not in all_entities['products']:
-                            all_entities['products'].append(entity)
+                    if isinstance(entity, str):
+                        # Simple string-based entity classification
+                        if '@' in entity or 'Inc' in entity or 'Corp' in entity:
+                            if entity not in all_entities['companies']:
+                                all_entities['companies'].append(entity)
+                        elif entity[0].isupper() and len(entity.split()) <= 3:
+                            if entity not in all_entities['people']:
+                                all_entities['people'].append(entity)
+                        else:
+                            if entity not in all_entities['products']:
+                                all_entities['products'].append(entity)
+                    elif isinstance(entity, dict):
+                        # Dictionary-based entity with type
+                        entity_name = entity.get('name', '')
+                        entity_type = entity.get('type', 'people')
+                        if entity_name and entity_type in all_entities:
+                            if entity_name not in all_entities[entity_type]:
+                                all_entities[entity_type].append(entity_name)
             
             # Create dynamic section
             dynamic_sections.append({
@@ -272,13 +295,28 @@ Provide your comprehensive analysis in the specified JSON format.
                 "More information about practical applications"
             ]
 
+        # Ensure entities is properly structured as EntityData
+        from models.video_models import EntityData
+        entities_obj = EntityData(
+            people=all_entities.get('people', []),
+            companies=all_entities.get('companies', []),
+            products=all_entities.get('products', []),
+            locations=all_entities.get('locations', [])
+        )
+
+        # Double check entities object is valid
+        if not isinstance(entities_obj, dict) or not hasattr(entities_obj, 'people'):
+            print(f"⚠️  Creating fallback EntityData object because entities_obj is: {type(entities_obj)}")
+            from models.video_models import EntityData
+            entities_obj = EntityData()
+        
         final_result = {
             'content_type': analysis_data.get('content_type', 'general'),
             'executive_summary': executive_summary.strip(),
             'dynamic_sections': dynamic_sections,
             'key_insights': key_insights,
             'actionable_takeaways': actionable_takeaways,
-            'entities': all_entities,
+            'entities': entities_obj,
             'topics': self._extract_topics_from_sections(dynamic_sections),
             'key_quotes': [],  # Will be filled from transcript analysis
             'estimated_read_time': f"{max(len(executive_summary) // 200, 3)} minutes",
@@ -307,13 +345,27 @@ Provide your comprehensive analysis in the specified JSON format.
         Enhance and validate the analysis data
         """
         # Ensure all required fields exist
+        from models.video_models import EntityData
+        
+        # Ensure entities is properly structured
+        entities_data = analysis_data.get('entities', {})
+        if isinstance(entities_data, dict):
+            entities_obj = EntityData(
+                people=entities_data.get('people', []),
+                companies=entities_data.get('companies', []),
+                products=entities_data.get('products', []),
+                locations=entities_data.get('locations', [])
+            )
+        else:
+            entities_obj = EntityData()
+        
         enhanced_data = {
             'content_type': analysis_data.get('content_type', 'general'),
             'executive_summary': analysis_data.get('executive_summary', f'Analysis of "{title}" from {channel_name}'),
             'dynamic_sections': analysis_data.get('dynamic_sections', []),
             'key_insights': analysis_data.get('key_insights', ['Content provides valuable insights']),
             'actionable_items': analysis_data.get('actionable_items', ['Apply the concepts discussed']),
-            'entities': analysis_data.get('entities', {'people': [], 'companies': [], 'products': [], 'locations': []}),
+            'entities': entities_obj,
             'topics': analysis_data.get('topics', self._extract_basic_topics(title)),
             'key_quotes': analysis_data.get('key_quotes', []),
             'estimated_read_time': analysis_data.get('estimated_read_time', '5 minutes'),
@@ -427,6 +479,7 @@ Return only valid JSON, no explanation.
             
         except Exception as e:
             # Final fallback with basic structure
+            from models.video_models import EntityData
             return {
                 'status': 'success',
                 'analysis': {
@@ -444,7 +497,10 @@ Return only valid JSON, no explanation.
                         "Research further into the mentioned topics"
                     ],
                     'content_type': "educational",
-                    'estimated_read_time': "5 minutes"
+                    'estimated_read_time': "5 minutes",
+                    'entities': EntityData(),
+                    'dynamic_sections': [],
+                    'confidence_score': 0.7
                 }
             }
 
