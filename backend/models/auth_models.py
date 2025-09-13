@@ -13,6 +13,9 @@ class UserPreferences(BaseModel):
     industry: Optional[str] = None
     purchase_frequency: Optional[str] = None
     product_goals: Optional[str] = None
+    
+    # Language preferences
+    preferred_language: str = Field(default="en", description="User's preferred language for transcripts and analysis")
 
 class UserRegister(BaseModel):
     email: EmailStr

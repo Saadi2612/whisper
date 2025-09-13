@@ -294,5 +294,53 @@ export const apiService = {
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to fetch YouTube videos');
     }
+  },
+
+  // Language and Translation APIs
+  async getSupportedLanguages() {
+    try {
+      const response = await apiClient.get('/languages');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to fetch supported languages');
+    }
+  },
+
+  async updateUserLanguage(preferredLanguage) {
+    try {
+      const response = await apiClient.put('/preferences/language', {
+        preferred_language: preferredLanguage
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to update language preference');
+    }
+  },
+
+  async translateVideo(videoId, targetLanguage) {
+    try {
+      const response = await apiClient.post(`/videos/${videoId}/translate?target_language=${targetLanguage}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to translate video');
+    }
+  },
+
+  async translateVideoAnalysis(videoId, targetLanguage) {
+    try {
+      const response = await apiClient.post(`/videos/${videoId}/translate-analysis?target_language=${targetLanguage}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to translate analysis');
+    }
+  },
+
+  async translateVideoTranscript(videoId, targetLanguage) {
+    try {
+      const response = await apiClient.post(`/videos/${videoId}/translate-transcript?target_language=${targetLanguage}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to translate transcript');
+    }
   }
 };
