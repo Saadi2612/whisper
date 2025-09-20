@@ -48,6 +48,9 @@ import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import VideoProcessSearch from './VideoProcessSearch';
+import AudioPlayer from './AudioPlayer';
+import StreamingAudioPlayer from './StreamingAudioPlayer';
+import SimpleStreamingAudioPlayer from './SimpleStreamingAudioPlayer';
 import VideoTranslation from './VideoTranslation';
 import TimeRangePicker from './TimeRangePicker';
 import TimeRangeSummary from './TimeRangeSummary';
@@ -499,14 +502,24 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                 <div className="space-y-8">
                   {/* Executive Summary */}
                   <section>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-2 h-8 bg-gradient-to-b from-purple-500 to-purple-600 rounded-full"></div>
-                      <h3 className="text-xl font-bold text-gray-900">Executive Summary</h3>
-                      {video.analysis?.confidence_score && (
-                        <Badge variant="outline" className="text-xs">
-                          {Math.round(video.analysis.confidence_score * 100)}% confidence
-                        </Badge>
-                      )}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-8 bg-gradient-to-b from-purple-500 to-purple-600 rounded-full"></div>
+                        <h3 className="text-xl font-bold text-gray-900">Executive Summary</h3>
+                        {video.analysis?.confidence_score && (
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(video.analysis.confidence_score * 100)}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                        {video.analysis?.executive_summary && (
+                          <SimpleStreamingAudioPlayer 
+                            text={video.analysis.executive_summary}
+                            size="sm"
+                            variant="outline"
+                            autoPlay={true}
+                          />
+                        )}
                     </div>
                     <div className="bg-gradient-to-r from-gray-50 to-purple-50 rounded-xl p-6 border border-purple-100">
                       <p className="text-gray-800 leading-7 text-base">
@@ -2302,6 +2315,13 @@ export default function Dashboard() {
                 <ExternalLink className="h-4 w-4 mr-2" />YouTube
               </Button>
               <Separator className="my-2" />
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start text-gray-600 hover:bg-gray-50"
+                onClick={() => navigate('/pricing')}
+              >
+                <Sparkles className="h-4 w-4 mr-2" />Pricing
+              </Button>
               <Button 
                 variant="ghost" 
                 className="w-full justify-start text-gray-600 hover:bg-gray-50"

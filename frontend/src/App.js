@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LandingPage from "./components/LandingPage";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings";
+import Pricing from "./components/Pricing";
 import { AuthProvider } from "./contexts/AuthContext";
 import { Toaster } from "./components/ui/sonner";
 
@@ -21,6 +22,10 @@ function App() {
             <Route 
               path="/settings" 
               element={<Settings />} 
+            />
+            <Route 
+              path="/pricing" 
+              element={<Pricing />} 
             />
           </Routes>
         </BrowserRouter>

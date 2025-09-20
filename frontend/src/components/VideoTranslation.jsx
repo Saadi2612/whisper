@@ -186,7 +186,7 @@ const VideoTranslation = ({ video, onVideoUpdate, onTimelineUpdate }) => {
           <label className="text-sm font-medium">Target Language</label>
           
           {/* Language Search Input */}
-          <div className="relative">
+          {/*<div className="relative">
             <input
               type="text"
               placeholder="Search languages..."
@@ -195,7 +195,7 @@ const VideoTranslation = ({ video, onVideoUpdate, onTimelineUpdate }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
-          </div>
+          </div>*/}
           
           <Select
             value={selectedLanguage}
@@ -214,21 +214,7 @@ const VideoTranslation = ({ video, onVideoUpdate, onTimelineUpdate }) => {
                   </div>
                 </SelectItem>
               ) : (
-                supportedLanguages
-                  .filter(lang => {
-                    // Filter out current video language
-                    if (lang.code === video.language) return false;
-                    
-                    // Filter by search term
-                    if (languageSearch) {
-                      const searchTerm = languageSearch.toLowerCase();
-                      return lang.name.toLowerCase().includes(searchTerm) || 
-                             lang.code.toLowerCase().includes(searchTerm);
-                    }
-                    
-                    return true;
-                  })
-                  .map((language, index) => (
+                supportedLanguages.map((language, index) => (
                     <SelectItem key={`${language.code}-${index}`} value={language.code}>
                       <div className="flex items-center space-x-2">
                         <Languages className="h-4 w-4" />

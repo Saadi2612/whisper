@@ -25,7 +25,14 @@ import {
   Loader2,
   ArrowLeft,
   Globe,
-  Languages
+  Languages,
+  CreditCard,
+  Crown,
+  Star,
+  Zap,
+  CheckCircle,
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
@@ -54,6 +61,10 @@ const Settings = () => {
     notification_email: true,
     process_frequency: 'hourly'
   });
+  const [subscription, setSubscription] = useState(null);
+  const [availablePlans, setAvailablePlans] = useState([]);
+  const [currentPlan, setCurrentPlan] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
 
   const interestOptions = [
     'Technology',
@@ -115,9 +126,28 @@ const Settings = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       loadUserData();
+      loadSubscriptionData();
     }
     loadSupportedLanguages();
   }, [isAuthenticated, user]);
+
+  const loadSubscriptionData = async () => {
+    setSubscriptionLoading(true);
+    try {
+      const [subscriptionData, plansData] = await Promise.all([
+        apiService.getCurrentSubscription(),
+        apiService.getSubscriptionPlans()
+      ]);
+      setSubscription(subscriptionData.subscription);
+      setAvailablePlans(plansData.plans || []);
+      setCurrentPlan(subscriptionData.plan);
+    } catch (error) {
+      console.error('Failed to load subscription data:', error);
+      toast.error('Failed to load subscription information');
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
 
   const loadUserData = async () => {
     setIsLoading(true);
@@ -220,6 +250,35 @@ const Settings = () => {
     }
   };
 
+  const getPlanIcon = (planType) => {
+    switch (planType) {
+      case 'free':
+        return <Star className="h-6 w-6 text-gray-400" />;
+      case 'basic':
+        return <Zap className="h-6 w-6 text-blue-500" />;
+      case 'premium':
+        return <Crown className="h-6 w-6 text-yellow-500" />;
+      default:
+        return <Star className="h-6 w-6 text-gray-400" />;
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!window.confirm('Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your current billing period.')) {
+      return;
+    }
+
+    try {
+      await apiService.cancelSubscription();
+      toast.success('Subscription cancelled successfully. You will retain access until the end of your current billing period.');
+      // Reload subscription data
+      await loadSubscriptionData();
+    } catch (error) {
+      console.error('Failed to cancel subscription:', error);
+      toast.error('Failed to cancel subscription. Please try again.');
+    }
+  };
+
   const saveSettings = async () => {
     setIsSaving(true);
     try {
@@ -273,7 +332,7 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue="preferences" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="preferences" className="flex items-center space-x-2">
             <Heart className="h-4 w-4" />
             <span>Preferences</span>
@@ -281,6 +340,10 @@ const Settings = () => {
           <TabsTrigger value="profile" className="flex items-center space-x-2">
             <User className="h-4 w-4" />
             <span>Profile</span>
+          </TabsTrigger>
+          <TabsTrigger value="subscription" className="flex items-center space-x-2">
+            <CreditCard className="h-4 w-4" />
+            <span>Subscription</span>
           </TabsTrigger>
           {/* <TabsTrigger value="notifications" className="flex items-center space-x-2">
             <Bell className="h-4 w-4" />
@@ -581,6 +644,129 @@ const Settings = () => {
                   </>
                 )}
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Subscription Tab */}
+        <TabsContent value="subscription" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <CreditCard className="h-5 w-5 text-blue-500" />
+                <span>Subscription Management</span>
+              </CardTitle>
+              <CardDescription>
+                Manage your subscription plan and billing information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {subscriptionLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                  <span className="ml-2 text-gray-600">Loading subscription information...</span>
+                </div>
+              ) : subscription ? (
+                <div className="space-y-6">
+                  {/* Current Plan Status */}
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        {getPlanIcon(currentPlan?.type)}
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-900">
+                            {currentPlan?.name || 'Unknown Plan'}
+                          </h3>
+                          <p className="text-gray-600">
+                            ${currentPlan?.price || 0}/{currentPlan?.interval || 'month'}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge 
+                        variant={subscription.status === 'active' ? 'default' : 'secondary'}
+                        className={subscription.status === 'active' ? 'bg-green-500' : ''}
+                      >
+                        {subscription.status === 'active' ? (
+                          <><CheckCircle className="h-3 w-3 mr-1" /> Active</>
+                        ) : (
+                          <><AlertCircle className="h-3 w-3 mr-1" /> {subscription.status}</>
+                        )}
+                      </Badge>
+                    </div>
+                    
+                    {currentPlan?.features && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Plan Features:</h4>
+                        <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {currentPlan?.features.map((feature, index) => (
+                            <li key={index} className="flex items-center text-sm text-gray-600">
+                              <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Billing Information */}
+                  {subscription.status === 'active' && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Billing Information</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Next billing date:</span>
+                          <span className="ml-2 font-medium">
+                            {subscription.current_period_end 
+                              ? new Date(subscription.current_period_end).toLocaleDateString()
+                              : 'N/A'
+                            }
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Amount:</span>
+                          <span className="ml-2 font-medium">
+                            ${currentPlan?.price || 0}/{currentPlan?.interval || 'month'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={() => navigate('/pricing')}
+                      className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Change Plan
+                    </Button>
+                    {subscription.status === 'active' && subscription.plan?.type !== 'free' && (
+                      <Button
+                        onClick={handleCancelSubscription}
+                        variant="outline"
+                        className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                      >
+                        Cancel Subscription
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Subscription Found</h3>
+                  <p className="text-gray-600 mb-4">You don't have an active subscription plan.</p>
+                  <Button
+                    onClick={() => navigate('/pricing')}
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Plans
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

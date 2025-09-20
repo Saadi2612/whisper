@@ -276,11 +276,11 @@ export const apiService = {
     try {
       const body = {
         query,
-        search_type: "topic",
+        search_type: "general",
         max_results: limit,
         sort_order: "relevance",
-        duration: "medium",
-        upload_time: "month",
+        duration: "any",
+        upload_time: "any",
         safe_search: true
       };
       
@@ -342,5 +342,76 @@ export const apiService = {
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to translate transcript');
     }
-  }
+  },
+
+  // Text-to-Speech APIs
+  async convertTextToSpeech(text, voiceId = null, modelId = null, outputFormat = null) {
+    try {
+      const requestBody = { text };
+      if (voiceId) requestBody.voice_id = voiceId;
+      if (modelId) requestBody.model_id = modelId;
+      if (outputFormat) requestBody.output_format = outputFormat;
+      
+      const response = await apiClient.post('/text-to-speech', requestBody);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to convert text to speech');
+    }
+  },
+
+  async getAvailableVoices() {
+    try {
+      const response = await apiClient.get('/text-to-speech/voices');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to get available voices');
+    }
+  },
+
+  // Subscription APIs
+  async getSubscriptionPlans() {
+    try {
+      const response = await apiClient.get('/subscriptions/plans');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to fetch subscription plans');
+    }
+  },
+
+  async getCurrentSubscription() {
+    try {
+      const response = await apiClient.get('/subscriptions/current');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to fetch current subscription');
+    }
+  },
+
+  async selectSubscriptionPlan(planId) {
+    try {
+      const response = await apiClient.post(`/subscriptions/subscribe?plan_id=${planId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to select subscription plan');
+    }
+  },
+
+  async createCheckoutSession(planId) {
+    try {
+      const response = await apiClient.post('/subscriptions/create-checkout-session', { plan_id: planId });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to create checkout session');
+    }
+  },
+
+  async cancelSubscription() {
+    try {
+      const response = await apiClient.post('/subscriptions/cancel');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to cancel subscription');
+    }
+  },
+
 };
