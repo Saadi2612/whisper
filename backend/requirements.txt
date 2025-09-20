@@ -26,3 +26,6 @@ typer>=0.9.0
 aiohttp>=3.9.0
 mangum
 schedule
+elevenlabs
+websockets
+stripe

@@ -3,6 +3,9 @@ import { Clock, TrendingUp, Target, Quote, Lightbulb, BarChart3, FileText, Eye, 
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
+import AudioPlayer from './AudioPlayer';
+import StreamingAudioPlayer from './StreamingAudioPlayer';
+import SimpleStreamingAudioPlayer from './SimpleStreamingAudioPlayer';
 
 const TimeRangeSummary = ({ summary, onClose }) => {
   const [showFormatted, setShowFormatted] = useState(false);
@@ -87,9 +90,17 @@ const TimeRangeSummary = ({ summary, onClose }) => {
         {/* Show formatted content if toggle is enabled */}
         {showFormatted && formatted_content ? (
           <div className="bg-white rounded-lg p-6 border border-purple-100">
-            <div className="flex items-center gap-2 mb-3">
-              <FileText className="h-4 w-4 text-purple-600" />
-              <h3 className="font-semibold text-gray-800">Formatted Summary</h3>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-purple-600" />
+                <h3 className="font-semibold text-gray-800">Formatted Summary</h3>
+              </div>
+                  <SimpleStreamingAudioPlayer
+                    text={formatted_content}
+                    size="sm"
+                    variant="outline"
+                    autoPlay={true}
+                  />
             </div>
             <div className="prose prose-sm max-w-none">
               <div className="whitespace-pre-wrap font-mono text-sm text-gray-700 bg-gray-50 rounded p-4 border">
@@ -102,9 +113,17 @@ const TimeRangeSummary = ({ summary, onClose }) => {
         {/* Main Content Summary */}
         {content_summary && (
           <div className="bg-white rounded-lg p-4 border border-purple-100">
-            <div className="flex items-center gap-2 mb-3">
-              <FileText className="h-4 w-4 text-purple-600" />
-              <h3 className="font-semibold text-gray-800">Summary</h3>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-purple-600" />
+                <h3 className="font-semibold text-gray-800">Summary</h3>
+              </div>
+                  <SimpleStreamingAudioPlayer
+                    text={content_summary}
+                    size="sm"
+                    variant="outline"
+                    autoPlay={false}
+                  />
             </div>
             <div className="text-gray-700 leading-relaxed space-y-2">
               {content_summary.split('\n').map((paragraph, index) => (

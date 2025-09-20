@@ -74,6 +74,11 @@ const LandingPage = () => {
           <div className="flex items-center space-x-4">
             {isAuthenticated ? (
               <div className="flex items-center gap-3">
+                <Link to="/pricing">
+                  <Button variant="ghost" size="sm">
+                    Pricing
+                  </Button>
+                </Link>
                 <Avatar className="h-8 w-8">
                   <AvatarFallback>{user?.name?.[0] || 'U'}</AvatarFallback>
                 </Avatar>
@@ -93,6 +98,11 @@ const LandingPage = () => {
               </div>
             ) : (
               <>
+                <Link to="/pricing">
+                  <Button variant="ghost" size="sm">
+                    Pricing
+                  </Button>
+                </Link>
                 <Button 
                   variant="ghost"
                   onClick={() => setShowAuthModal(true)}
