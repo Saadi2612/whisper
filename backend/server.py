@@ -2179,9 +2179,26 @@ async def get_user_stats(user_id: str = Depends(optional_auth)):
 
         total_duration = 0
         for processed_video in processed_videos:
-            # print(f"Processed video duration: {processed_video.get('duration', 0)}")
-            cleaned_duration = processed_video.get('duration', 0)[:-1]
-            duration = int(cleaned_duration)
+            duration_value = processed_video.get('duration')
+            if duration_value is None:
+                print(f"Skipping video with null duration")
+                continue
+            
+            # Handle different duration formats
+            if isinstance(duration_value, str):
+                # Remove last character if it's a string (e.g., "123s" -> "123")
+                cleaned_duration = duration_value[:-1] if duration_value.endswith('s') else duration_value
+                try:
+                    duration = int(cleaned_duration)
+                except (ValueError, TypeError):
+                    print(f"Invalid duration format: {duration_value}")
+                    continue
+            elif isinstance(duration_value, (int, float)):
+                duration = int(duration_value)
+            else:
+                print(f"Unexpected duration type: {type(duration_value)} for value: {duration_value}")
+                continue
+            
             print(f"Duration: {duration}")
             total_duration += duration
         
@@ -2375,18 +2392,15 @@ async def get_video_timeline(video_id: str, user_id: str = Depends(optional_auth
         # Use raw_transcript (with timestamps) if available, otherwise fall back to formatted transcript
         raw_transcript = video.get('raw_transcript', '')
         formatted_transcript = video.get('transcript', '')
-
-        print(f"Formatted transcript: {formatted_transcript[:200]}")
-        print(f"Raw transcript: {raw_transcript[:200]}")
         
-        # Parse formatted transcript data and prefer it otherwise use raw transcript as fallback
-        if formatted_transcript:
-            transcript_to_use = formatted_transcript
-        else:
+        # Parse raw transcript data and prefer it for timeline as it should contain timestamps
+        if raw_transcript:
             transcript_to_use = get_raw_transcript_data(raw_transcript)
+        else:
+            transcript_to_use = formatted_transcript
         
         # Log which transcript type we're using for debugging
-        logger.info(f"Timeline for video {video_id}: using {'formatted' if formatted_transcript else 'raw'} transcript")
+        logger.info(f"Timeline for video {video_id}: using {'raw' if raw_transcript else 'formatted'} transcript")
         
         if not transcript_to_use:
             return {
