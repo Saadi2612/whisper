@@ -2217,7 +2217,7 @@ async def get_user_stats(user_id: str = Depends(optional_auth)):
         print(f"Total duration: {total_duration}")
         
         # Calculate estimated time saved
-        estimated_hours = (total_duration / 60) * 0.75 # Consider that we saved 75% of the time, not all
+        estimated_hours = (total_duration / 3600) * 0.75 # Consider that we saved 75% of the time, not all
         print(f"Estimated hours: {estimated_hours}")
         
         return {
