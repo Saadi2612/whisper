@@ -11,9 +11,10 @@ class WebSocketTTSService {
 
   connect() {
     return new Promise((resolve, reject) => {
+      const WS_URL = process.env.WEBSOCKET_URL;
       try {
-        // Use localhost:8001 for development
-        const wsUrl = 'ws://localhost:8000/ws/text-to-speech';
+        // Use localhost:8000 for development
+        const wsUrl = `${WS_URL}/ws/text-to-speech`;
         
         console.log('Connecting to WebSocket TTS service:', wsUrl);
         console.log('Current location:', window.location.href);

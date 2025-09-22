@@ -51,6 +51,7 @@ STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+FRONTEND_URL = os.getenv('FRONTEND_URL')
 
 # Initialize services
 supadata_service = SuperdataService()
@@ -700,8 +701,8 @@ async def subscribe_to_plan(plan_id: str, user_id: str = Depends(require_auth)):
 
 class CheckoutSessionRequest(BaseModel):
     plan_id: str
-    success_url: Optional[str] = "http://localhost:3000/success"
-    cancel_url: Optional[str] = "http://localhost:3000/cancel"
+    success_url: Optional[str] = f"{FRONTEND_URL}/success"
+    cancel_url: Optional[str] = f"{FRONTEND_URL}/cancel"
 
 @api_router.post("/subscriptions/create-checkout-session")
 async def create_checkout_session(
