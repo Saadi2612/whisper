@@ -2375,6 +2375,9 @@ async def get_video_timeline(video_id: str, user_id: str = Depends(optional_auth
         # Use raw_transcript (with timestamps) if available, otherwise fall back to formatted transcript
         raw_transcript = video.get('raw_transcript', '')
         formatted_transcript = video.get('transcript', '')
+
+        print(f"Formatted transcript: {formatted_transcript[:200]}")
+        print(f"Raw transcript: {raw_transcript[:200]}")
         
         # Parse formatted transcript data and prefer it otherwise use raw transcript as fallback
         if formatted_transcript:
@@ -2383,7 +2386,7 @@ async def get_video_timeline(video_id: str, user_id: str = Depends(optional_auth
             transcript_to_use = get_raw_transcript_data(raw_transcript)
         
         # Log which transcript type we're using for debugging
-        logger.info(f"Timeline for video {video_id}: using {'raw' if raw_transcript else 'formatted'} transcript")
+        logger.info(f"Timeline for video {video_id}: using {'formatted' if formatted_transcript else 'raw'} transcript")
         
         if not transcript_to_use:
             return {
