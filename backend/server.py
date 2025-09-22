@@ -2186,10 +2186,22 @@ async def get_user_stats(user_id: str = Depends(optional_auth)):
             
             # Handle different duration formats
             if isinstance(duration_value, str):
-                # Remove last character if it's a string (e.g., "123s" -> "123")
-                cleaned_duration = duration_value[:-1] if duration_value.endswith('s') else duration_value
                 try:
-                    duration = int(cleaned_duration)
+                    if duration_value.endswith('s'):
+                        # Duration in seconds (e.g., "123s" -> 123)
+                        cleaned_duration = duration_value[:-1]
+                        duration = int(cleaned_duration)
+                    elif duration_value.endswith('m'):
+                        # Duration in minutes (e.g., "3m" -> 180 seconds)
+                        cleaned_duration = duration_value[:-1]
+                        duration = int(cleaned_duration) * 60
+                    elif duration_value.endswith('h'):
+                        # Duration in hours (e.g., "2h" -> 7200 seconds)
+                        cleaned_duration = duration_value[:-1]
+                        duration = int(cleaned_duration) * 3600
+                    else:
+                        # Try to parse as plain number (assume seconds)
+                        duration = int(duration_value)
                 except (ValueError, TypeError):
                     print(f"Invalid duration format: {duration_value}")
                     continue
