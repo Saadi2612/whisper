@@ -1,4 +1,4 @@
-const WS_URL = process.env.WEBSOCKET_URL;
+const WS_URL = process.env.REACT_APP_WEBSOCKET_URL;
 class WebSocketTTSService {
   constructor() {
     this.ws = null;
