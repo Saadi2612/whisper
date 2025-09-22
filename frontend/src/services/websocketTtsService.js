@@ -1,3 +1,4 @@
+const WS_URL = process.env.WEBSOCKET_URL;
 class WebSocketTTSService {
   constructor() {
     this.ws = null;
@@ -11,7 +12,7 @@ class WebSocketTTSService {
 
   connect() {
     return new Promise((resolve, reject) => {
-      const WS_URL = process.env.WEBSOCKET_URL;
+
       try {
         // Use localhost:8000 for development
         const wsUrl = `${WS_URL}/ws/text-to-speech`;
