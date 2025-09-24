@@ -46,14 +46,14 @@ import {
 } from "recharts";
 import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
+import { usePlanAccess } from '../hooks/usePlanAccess';
 import AuthModal from './AuthModal';
 import VideoProcessSearch from './VideoProcessSearch';
-import AudioPlayer from './AudioPlayer';
-import StreamingAudioPlayer from './StreamingAudioPlayer';
 import SimpleStreamingAudioPlayer from './SimpleStreamingAudioPlayer';
 import VideoTranslation from './VideoTranslation';
 import TimeRangePicker from './TimeRangePicker';
 import TimeRangeSummary from './TimeRangeSummary';
+import LockedFeature from './LockedFeature';
 import { toast } from 'sonner';
 
 // Utility to format topics as badges
@@ -387,6 +387,7 @@ function VideoQA({ video }) {
   );
 }
 function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdate }) {
+  const { canAccessAnalysisFeature } = usePlanAccess();
   const [timeline, setTimeline] = useState(null);
   const [timeRangeSummaries, setTimeRangeSummaries] = useState([]);
   const [isGeneratingTimeRange, setIsGeneratingTimeRange] = useState(false);
@@ -512,7 +513,7 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                           </Badge>
                         )}
                       </div>
-                        {video.analysis?.executive_summary && (
+                        {video.analysis?.executive_summary && canAccessAnalysisFeature('summary_to_speech') && (
                           <SimpleStreamingAudioPlayer 
                             text={video.analysis.executive_summary}
                             size="sm"
@@ -638,7 +639,7 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                   )}
 
                   {/* Key Insights */}
-                  {video.analysis?.key_insights && video.analysis.key_insights.length > 0 && (
+                  {video.analysis?.key_insights && video.analysis.key_insights.length > 0 && canAccessAnalysisFeature('key_insights') && (
                     <section>
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-2 h-8 bg-gradient-to-b from-yellow-500 to-orange-500 rounded-full"></div>
@@ -662,7 +663,7 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                   )}
 
                   {/* Entities */}
-                  {video.analysis?.entities && (
+                  {video.analysis?.entities && canAccessAnalysisFeature('people_companies_mentioned') && (
                     <section>
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-2 h-8 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full"></div>
@@ -761,7 +762,7 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                   )}
 
                   {/* Tone Analysis */}
-                  {video.analysis?.tone_analysis && (
+                  {video.analysis?.tone_analysis && canAccessAnalysisFeature('tone_analysis') && (
                     <section>
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-2 h-8 bg-gradient-to-b from-amber-500 to-orange-500 rounded-full"></div>
@@ -926,7 +927,7 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                   )}
 
                   {/* Topic Analysis */}
-                  {video.chart_data?.topicStrengths && (
+                  {video.chart_data?.topicStrengths && canAccessAnalysisFeature('topic_analysis') && (
                     <section>
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-2 h-8 bg-gradient-to-b from-violet-500 to-purple-500 rounded-full"></div>
@@ -950,7 +951,7 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                   )}
 
                   {/* Tone Analysis */}
-                  {video.analysis?.tone_analysis && (
+                  {/* {video.analysis?.tone_analysis && (
                     <section>
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-2 h-8 bg-gradient-to-b from-orange-500 to-red-500 rounded-full"></div>
@@ -1007,14 +1008,18 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                         </CardContent>
                       </Card>
                     </section>
-                  )}
+                  )} */}
                 </div>
               </ScrollArea>
             </TabsContent>
 
             {/* Transcript Tab */}
             <TabsContent value="transcript" className="flex-1 overflow-hidden">
-              <ScrollArea className="h-[80vh] px-6 pr-8">
+              <LockedFeature
+                featureName="Transcript"
+                featurePath="analysis.transcript"
+              >
+                <ScrollArea className="h-[80vh] px-6 pr-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1116,12 +1121,17 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                     </Button>
                   </div>
                 </div>
-              </ScrollArea>
+                </ScrollArea>
+              </LockedFeature>
             </TabsContent>
 
             {/* Time Range Tab */}
             <TabsContent value="timerange" className="flex-1 overflow-hidden">
-              <ScrollArea className="h-[70vh] px-6 pr-8">
+              <LockedFeature
+                featureName="Time Range Analysis"
+                featurePath="analysis.time_range"
+              >
+                <ScrollArea className="h-[70vh] px-6 pr-8">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1212,25 +1222,36 @@ function VideoDetail({ open, onOpenChange, video, onVideoUpdate, onTimelineUpdat
                     </Card>
                   )}
                 </div>
-              </ScrollArea>
+                </ScrollArea>
+              </LockedFeature>
             </TabsContent>
 
             {/* Q&A Tab */}
             <TabsContent value="qa" className="flex-1 overflow-hidden">
-              <ScrollArea className="h-[70vh] px-6 pr-8">
-                <VideoQA video={video} />
-              </ScrollArea>
+              <LockedFeature
+                featureName="Q&A"
+                featurePath="analysis.q_and_a"
+              >
+                <ScrollArea className="h-[70vh] px-6 pr-8">
+                  <VideoQA video={video} />
+                </ScrollArea>
+              </LockedFeature>
             </TabsContent>
 
             {/* Translation Tab */}
             <TabsContent value="translation" className="flex-1 overflow-hidden">
-              <ScrollArea className="h-[70vh] px-6 pr-8">
-                <VideoTranslation 
-                  video={video} 
-                  onVideoUpdate={onVideoUpdate}
-                  onTimelineUpdate={loadTimeline}
-                />
-              </ScrollArea>
+              <LockedFeature
+                featureName="Translation"
+                featurePath="analysis.translation"
+              >
+                <ScrollArea className="h-[70vh] px-6 pr-8">
+                  <VideoTranslation 
+                    video={video} 
+                    onVideoUpdate={onVideoUpdate}
+                    onTimelineUpdate={loadTimeline}
+                  />
+                </ScrollArea>
+              </LockedFeature>
             </TabsContent>
           </Tabs>
         </div>
@@ -1743,6 +1764,96 @@ function YouTubeView({
 }
 
 // ----------------------------------------------------
+// Placeholder Components for Locked Features
+// ----------------------------------------------------
+function TopicsView() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Topics</h2>
+          <p className="text-gray-600">Discover trending topics from your videos</p>
+        </div>
+      </div>
+      
+      <Card className="text-center py-12">
+        <CardContent>
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+              <Tag className="h-8 w-8 text-purple-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Topics Analysis</h3>
+              <p className="text-gray-600">
+                AI-powered topic analysis and trending insights from your video library
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SavedView() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Saved Videos</h2>
+          <p className="text-gray-600">Your bookmarked videos and favorites</p>
+        </div>
+      </div>
+      
+      <Card className="text-center py-12">
+        <CardContent>
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+              <Bookmark className="h-8 w-8 text-purple-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Saved Videos</h3>
+              <p className="text-gray-600">
+                Save and organize your favorite videos for easy access
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function QueuesView() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Processing Queues</h2>
+          <p className="text-gray-600">Manage your video processing queues</p>
+        </div>
+      </div>
+      
+      <Card className="text-center py-12">
+        <CardContent>
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+              <ListChecks className="h-8 w-8 text-purple-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Processing Queues</h3>
+              <p className="text-gray-600">
+                Queue and manage multiple video processing tasks
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
 // Add Channel Modal Component
 // ----------------------------------------------------
 function AddChannelModal({ open, onOpenChange, onChannelAdded }) {
@@ -1933,6 +2044,7 @@ function VideoProcessForm({ onVideoProcessed }) {
 // ----------------------------------------------------
 export default function Dashboard() {
   const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { canAccessDashboardTab } = usePlanAccess();
   const location = useLocation();
   const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
@@ -2474,25 +2586,56 @@ export default function Dashboard() {
                 )}
               </>
             ) : currentView === 'channels' ? (
-              <MyChannelsView 
-                followedChannels={followedChannels} 
-                onUnfollow={handleUnfollowChannel}
-                onAddChannel={() => setShowAddChannelModal(true)}
-              />
+              <LockedFeature
+                featureName="My Channels"
+                featurePath="dashboard.my_channels"
+              >
+                <MyChannelsView 
+                  followedChannels={followedChannels} 
+                  onUnfollow={handleUnfollowChannel}
+                  onAddChannel={() => setShowAddChannelModal(true)}
+                />
+              </LockedFeature>
+            ) : currentView === 'topics' ? (
+              <LockedFeature
+                featureName="Topics"
+                featurePath="dashboard.topics"
+              >
+                <TopicsView />
+              </LockedFeature>
+            ) : currentView === 'saved' ? (
+              <LockedFeature
+                featureName="Saved Videos"
+                featurePath="dashboard.saved"
+              >
+                <SavedView />
+              </LockedFeature>
+            ) : currentView === 'queues' ? (
+              <LockedFeature
+                featureName="Processing Queues"
+                featurePath="dashboard.queues"
+              >
+                <QueuesView />
+              </LockedFeature>
             ) : currentView === 'youtube' ? (
-              <YouTubeView
-                youtubeVideos={youtubeVideos}
-                youtubeSearchQuery={youtubeSearchQuery}
-                setYoutubeSearchQuery={setYoutubeSearchQuery}
-                isLoadingYoutube={isLoadingYoutube}
-                setIsLoadingYoutube={setIsLoadingYoutube}
-                setYoutubeVideos={setYoutubeVideos}
-                youtubeSearchInfo={youtubeSearchInfo}
-                setYoutubeSearchInfo={setYoutubeSearchInfo}
-                isLoadingMoreYoutube={isLoadingMoreYoutube}
-                setIsLoadingMoreYoutube={setIsLoadingMoreYoutube}
-                onProcessVideo={handleProcessYouTubeVideo}
-              />
+              <LockedFeature
+                featureName="YouTube Search"
+                featurePath="dashboard.youtube"
+              >
+                <YouTubeView
+                  youtubeVideos={youtubeVideos}
+                  youtubeSearchQuery={youtubeSearchQuery}
+                  setYoutubeSearchQuery={setYoutubeSearchQuery}
+                  isLoadingYoutube={isLoadingYoutube}
+                  setIsLoadingYoutube={setIsLoadingYoutube}
+                  setYoutubeVideos={setYoutubeVideos}
+                  youtubeSearchInfo={youtubeSearchInfo}
+                  setYoutubeSearchInfo={setYoutubeSearchInfo}
+                  isLoadingMoreYoutube={isLoadingMoreYoutube}
+                  setIsLoadingMoreYoutube={setIsLoadingMoreYoutube}
+                  onProcessVideo={handleProcessYouTubeVideo}
+                />
+              </LockedFeature>
             ) : (
               <Card className="text-center py-12">
                 <CardContent>

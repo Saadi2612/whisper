@@ -48,11 +48,11 @@ export const PLAN_CONSTRAINTS = {
     analysis: {
       ai_analysis: {
         executive_summary: true,
-        summary_to_speech: true,
+        summary_to_speech: false,
         detailed_analysis: true,
         key_insights: true,
         people_companies_mentioned: true,
-        topic_analysis: true,
+        topic_analysis: false,
         tone_analysis: false
       },
       transcript: true,

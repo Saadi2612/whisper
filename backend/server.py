@@ -14,6 +14,7 @@ import re
 from pydantic import BaseModel
 from typing import List, Optional, Literal
 import json
+from bson import ObjectId
 
 # Import services and models
 from services.supadata_service import SuperdataService
@@ -28,6 +29,7 @@ from services.time_range_summary_service import TimeRangeSummaryService
 from services.translation_service import TranslationService
 from services.text_to_speech_service import TextToSpeechService
 from services.websocket_tts_service import WebSocketTTSService
+from services.email_service import EmailService
 from models.video_models import (
     VideoProcessRequest, ProcessedVideo, VideoListResponse, 
     VideoProcessResponse, ChannelFollowRequest, FollowedChannel, SearchQuery,
@@ -48,6 +50,19 @@ db = client[os.environ['DB_NAME']]
 
 # Stripe configuration
 STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+
+def convert_objectid_to_str(obj):
+    """Convert MongoDB ObjectId objects to strings for JSON serialization"""
+    if isinstance(obj, dict):
+        return {key: convert_objectid_to_str(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectid_to_str(item) for item in obj]
+    elif isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 WEBHOOK_URL = os.getenv('WEBHOOK_URL')
@@ -66,6 +81,7 @@ time_range_summary_service = TimeRangeSummaryService()
 translation_service = TranslationService()
 text_to_speech_service = TextToSpeechService()
 websocket_tts_service = WebSocketTTSService()
+email_service = EmailService()
 
 # Security
 security = HTTPBearer(auto_error=False)
@@ -149,6 +165,36 @@ async def optional_auth(user_id: str = Depends(get_current_user)) -> Optional[st
     return user_id
 
 # Helper functions
+async def send_welcome_email(user_name: str, user_email: str):
+    """Send welcome email to new user"""
+    try:
+        subject, html_content, text_content = email_service.get_welcome_email_template(user_name, user_email)
+        result = await email_service.send_email(
+            to_email=user_email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content
+        )
+        logger.info(f"Welcome email result for {user_email}: {result['status']}")
+    except Exception as e:
+        logger.error(f"Failed to send welcome email to {user_email}: {str(e)}")
+
+async def send_subscription_email(user_name: str, user_email: str, plan_name: str, plan_price: float, plan_interval: str, plan_features: List[str]):
+    """Send subscription confirmation email"""
+    try:
+        subject, html_content, text_content = email_service.get_subscription_email_template(
+            user_name, plan_name, plan_price, plan_interval, plan_features
+        )
+        result = await email_service.send_email(
+            to_email=user_email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content
+        )
+        logger.info(f"Subscription email result for {user_email}: {result['status']}")
+    except Exception as e:
+        logger.error(f"Failed to send subscription email to {user_email}: {str(e)}")
+
 def extract_video_info(url: str) -> dict:
     """Extract basic video info from URL"""
     video_id = supadata_service.extract_video_id(url)
@@ -301,7 +347,7 @@ async def generate_mock_channel_data(channel_name: str) -> dict:
 # Authentication Routes
 
 @api_router.post("/auth/register", response_model=UserResponse)
-async def register_user(user_data: UserRegister):
+async def register_user(user_data: UserRegister, background_tasks: BackgroundTasks):
     """Register a new user"""
     try:
         result = await auth_service.create_user(
@@ -312,6 +358,13 @@ async def register_user(user_data: UserRegister):
         )
         
         if result['status'] == 'success':
+            # Send welcome email in background
+            background_tasks.add_task(
+                send_welcome_email,
+                user_data.name,
+                user_data.email
+            )
+            
             return UserResponse(
                 status="success",
                 user=User(**result['user']),
@@ -358,6 +411,17 @@ async def get_current_user_info(user_id: str = Depends(require_auth)):
         user = await auth_service.get_user_by_id(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+
+        subscription = await db.subscriptions.find_one({"user_id": user_id})
+        # print("subscription", subscription)
+
+        plan = None
+        if subscription and subscription.get("plan_id"):
+            plan = await db.plans.find_one({"_id": ObjectId(subscription["plan_id"])})
+            # print("plan", plan)
+
+        user["plan"] = plan.get("type", "free") if plan else "free"
+        # print("user", user)
         
         return {"user": user}
         
@@ -540,36 +604,19 @@ async def get_stripe_config():
 async def get_available_plans():
     """Get all available subscription plans"""
     try:
-        # Define available plans
-        plans = [
-            Plan(
-                id="free",
-                name="Free",
-                type=PlanType.FREE,
-                price=0,
-                interval="month",
-                features=["5 videos per month", "Basic analysis", "Transcript access"],
-                video_limit=5
-            ),
-            Plan(
-                id="basic",
-                name="Basic",
-                type=PlanType.BASIC,
-                price=999,  # $9.99 in cents
-                interval="month",
-                features=["50 videos per month", "Enhanced analysis", "Priority processing", "Email support"],
-                video_limit=50
-            ),
-            Plan(
-                id="premium",
-                name="Premium",
-                type=PlanType.PREMIUM,
-                price=1999,  # $19.99 in cents
-                interval="month",
-                features=["Unlimited videos", "Advanced analysis", "Real-time processing", "Priority support", "API access"],
-                video_limit=None
-            )
-        ]
+        # Get all available plans
+        plans_raw = await db.plans.find({}).to_list(length=10)
+        
+        # Convert to Pydantic models to handle ObjectId serialization
+        plans = []
+        for plan_data in plans_raw:
+            # Convert ObjectId to string and remove _id field
+            if '_id' in plan_data:
+                del plan_data['_id']
+            
+            # Create Plan model instance
+            plan = Plan(**plan_data)
+            plans.append(plan)
         
         return {"status": "success", "plans": plans}
         
@@ -608,15 +655,23 @@ async def get_current_subscription(user_id: str = Depends(require_auth)):
             )
         
         # Get plan details
-        plan = await db.plans.find_one({"_id": ObjectId(subscription["plan_id"])})
-        print("plan", plan)
-        if not plan:
+        plan_raw = await db.plans.find_one({"_id": ObjectId(subscription["plan_id"])})
+        print("plan", plan_raw)
+        if not plan_raw:
             raise HTTPException(status_code=404, detail="Plan not found")
+        
+        # Remove _id field for Pydantic model creation
+        if '_id' in plan_raw:
+            del plan_raw['_id']
+        
+        # Remove _id field from subscription as well if it exists
+        if '_id' in subscription:
+            del subscription['_id']
         
         return SubscriptionResponse(
             status="success",
             subscription=Subscription(**subscription),
-            plan=Plan(**plan)
+            plan=Plan(**plan_raw)
         )
         
     except HTTPException:
@@ -626,7 +681,7 @@ async def get_current_subscription(user_id: str = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/subscriptions/subscribe")
-async def subscribe_to_plan(plan_id: str, user_id: str = Depends(require_auth)):
+async def subscribe_to_plan(plan_id: str, user_id: str = Depends(require_auth), background_tasks: BackgroundTasks = None):
     """Subscribe user to a plan"""
     try:
         from bson import ObjectId
@@ -675,6 +730,21 @@ async def subscribe_to_plan(plan_id: str, user_id: str = Depends(require_auth)):
                 }
             }
         )
+        
+        # Send subscription confirmation email in background
+        if background_tasks:
+            # Get user details for email
+            user = await auth_service.get_user_by_id(user_id)
+            if user:
+                background_tasks.add_task(
+                    send_subscription_email,
+                    user.get('name', 'User'),
+                    user.get('email', ''),
+                    plan["name"],
+                    plan["price"],
+                    plan["interval"],
+                    plan.get("features", [])
+                )
         
         return {
             "status": "success",
@@ -1080,6 +1150,22 @@ async def handle_subscription_created(subscription_data):
                 }
             )
             logger.info(f"User updated with subscription info: {user_id}")
+            
+            # Send subscription confirmation email
+            try:
+                user = await db.users.find_one({"_id": user_object_id})
+                if user:
+                    await send_subscription_email(
+                        user.get('name', 'User'),
+                        user.get('email', ''),
+                        plan.get('name', 'Unknown Plan'),
+                        plan.get('price', 0),
+                        plan.get('interval', 'month'),
+                        plan.get('features', [])
+                    )
+            except Exception as email_error:
+                logger.error(f"Failed to send subscription email: {email_error}")
+                
         except Exception as user_update_error:
             logger.error(f"Error updating user subscription info: {user_update_error}")
             logger.error(f"User ID that caused error: {user_id}")
@@ -1381,6 +1467,93 @@ async def handle_checkout_session_completed(session_data):
 @api_router.get("/")
 async def root():
     return {"message": "Whisper Dashboard API is running"}
+
+@api_router.post("/test-email")
+async def test_email(email: str, user_id: str = Depends(require_auth)):
+    """Test email functionality"""
+    try:
+        # Get user details
+        user = await auth_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Send test welcome email
+        result = await send_welcome_email(user.get('name', 'Test User'), email)
+        
+        return {
+            "status": "success",
+            "message": "Test email sent successfully",
+            "email": email
+        }
+        
+    except Exception as e:
+        logger.error(f"Test email error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/subscriptions/verify-session")
+async def verify_stripe_session(session_id: str, user_id: str = Depends(require_auth)):
+    """Verify Stripe checkout session and return subscription details"""
+    try:
+        import stripe
+        from bson import ObjectId
+        
+        # Set Stripe API key
+        stripe.api_key = STRIPE_SECRET_KEY
+        
+        # Retrieve the checkout session
+        session = stripe.checkout.Session.retrieve(session_id)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Check if session is completed
+        if session.payment_status != 'paid':
+            raise HTTPException(status_code=400, detail="Payment not completed")
+        
+        # Get subscription ID from session
+        subscription_id = session.subscription
+        if not subscription_id:
+            raise HTTPException(status_code=400, detail="No subscription found in session")
+        
+        # Get subscription details from Stripe
+        stripe_subscription = stripe.Subscription.retrieve(subscription_id)
+        
+        # Find subscription in our database
+        subscription = await db.subscriptions.find_one({
+            "stripe_subscription_id": subscription_id
+        })
+        
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found in database")
+        
+        # Get plan details
+        plan = await db.plans.find_one({"_id": ObjectId(subscription["plan_id"])})
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        
+        # Remove _id fields for JSON serialization
+        if '_id' in subscription:
+            del subscription['_id']
+        if '_id' in plan:
+            del plan['_id']
+        
+        return {
+            "status": "success",
+            "subscription": subscription,
+            "plan": plan,
+            "session": {
+                "id": session.id,
+                "payment_status": session.payment_status,
+                "customer_email": session.customer_details.email
+            }
+        }
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error verifying session: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error verifying session: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Translation Routes
 

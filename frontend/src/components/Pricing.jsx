@@ -33,7 +33,14 @@ const Pricing = () => {
           price: 0.00,
           currency: "usd",
           interval: "month",
-          features: ["5 videos per month", "Basic analysis", "Transcript access"],
+          features: [
+            // "Process 5 videos per month",
+            "Full transcript access",
+            "AI executive summary",
+            "Basic video analysis",
+            "Home dashboard access",
+            "Standard video processing"
+          ],
           video_limit: 5,
           is_active: true
         },
@@ -44,7 +51,18 @@ const Pricing = () => {
           price: 9.99,
           currency: "usd",
           interval: "month",
-          features: ["50 videos per month", "Enhanced analysis", "Priority processing", "Email support"],
+          features: [
+            // "Process 50 videos per month",
+            "Full transcript access",
+            "AI executive summary with key insights",
+            "People & companies mentioned",
+            "Enhanced video analysis",
+            "Time range summaries",
+            "Q&A with your videos",
+            "Text-to-speech summaries",
+            "Follow YouTube channels",
+            "Home and My Channels dashboard"
+          ],
           video_limit: 50,
           is_active: true
         },
@@ -55,7 +73,22 @@ const Pricing = () => {
           price: 19.99,
           currency: "usd",
           interval: "month",
-          features: ["Unlimited videos", "Advanced analysis", "Real-time processing", "Priority support", "API access"],
+          features: [
+            // "Unlimited video processing",
+            "Full transcript access",
+            "Complete AI analysis suite",
+            "Advanced topic analysis",
+            "Tone & delivery analysis",
+            "Time range summaries",
+            "Q&A with your videos",
+            "Video translation",
+            "Text-to-speech summaries",
+            "Follow YouTube channels",
+            "YouTube video search",
+            "Topics & saved videos",
+            "Processing queues",
+            "Full dashboard access"
+          ],
           video_limit: null,
           is_active: true
         }
@@ -81,7 +114,10 @@ const Pricing = () => {
         toast.success('Free plan activated successfully!');
       } else {
         // Handle paid plan selection - redirect to Stripe checkout
-        const response = await apiService.createCheckoutSession(plan.id);
+        const successUrl = `${window.location.origin}/success`;
+        const cancelUrl = `${window.location.origin}/cancel`;
+        
+        const response = await apiService.createCheckoutSession(plan.id, successUrl, cancelUrl);
         if (response.url) {
           window.location.href = response.url;
         } else {
@@ -109,18 +145,6 @@ const Pricing = () => {
     }
   };
 
-  const getPlanColor = (planType) => {
-    switch (planType) {
-      case 'free':
-        return 'border-gray-200 hover:border-gray-300';
-      case 'basic':
-        return 'border-blue-200 hover:border-blue-300';
-      case 'premium':
-        return 'border-yellow-200 hover:border-yellow-300 ring-2 ring-yellow-100';
-      default:
-        return 'border-gray-200 hover:border-gray-300';
-    }
-  };
 
   const isCurrentPlan = (plan) => {
     return user?.subscription?.plan_id === plan.id;
@@ -155,24 +179,34 @@ const Pricing = () => {
           {plans.map((plan) => (
             <Card
               key={plan.id}
-              className={`relative transition-all duration-300 hover:shadow-xl ${getPlanColor(plan.type)} ${
-                plan.type === 'premium' ? 'scale-105' : ''
+              className={`relative transition-all duration-300 hover:shadow-xl flex flex-col h-full ${
+                plan.type === 'premium' 
+                  ? 'border-2 border-yellow-200 shadow-lg scale-105' 
+                  : 'border border-gray-200 hover:border-gray-300'
               }`}
             >
               {plan.type === 'premium' && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <Badge className="bg-yellow-500 text-white px-4 py-1">
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
+                  <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-4 py-1 text-sm font-medium shadow-md">
                     Most Popular
                   </Badge>
                 </div>
               )}
               
-              <CardHeader className="text-center pb-8">
+              <CardHeader className="text-center pb-6 pt-8">
                 <div className="flex justify-center mb-4">
-                  {getPlanIcon(plan.type)}
+                  <div className={`p-3 rounded-full ${
+                    plan.type === 'free' 
+                      ? 'bg-gray-100' 
+                      : plan.type === 'basic' 
+                      ? 'bg-blue-100' 
+                      : 'bg-yellow-100'
+                  }`}>
+                    {getPlanIcon(plan.type)}
+                  </div>
                 </div>
-                <CardTitle className="text-2xl font-bold">{plan.name}</CardTitle>
-                <CardDescription className="text-gray-600">
+                <CardTitle className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</CardTitle>
+                <CardDescription className="text-gray-600 text-base">
                   {plan.type === 'free' 
                     ? 'Perfect for getting started'
                     : plan.type === 'basic'
@@ -181,61 +215,70 @@ const Pricing = () => {
                   }
                 </CardDescription>
                 <div className="mt-6">
-                  <span className="text-4xl font-bold text-gray-900">
-                    ${plan.price}
-                  </span>
-                  <span className="text-gray-600 ml-2">
-                    /{plan.interval}
-                  </span>
+                  <div className="flex items-baseline justify-center">
+                    <span className="text-5xl font-bold text-gray-900">
+                      ${plan.price}
+                    </span>
+                    <span className="text-gray-600 ml-2 text-lg">
+                      /{plan.interval}
+                    </span>
+                  </div>
                 </div>
               </CardHeader>
 
-              <CardContent className="px-6 pb-6">
-                <ul className="space-y-4">
+              <CardContent className="px-6 pb-6 flex-1">
+                <ul className="space-y-3 mb-6">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-start">
                       <Check className="h-5 w-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
-                      <span className="text-gray-700">{feature}</span>
+                      <span className="text-gray-700 text-sm leading-relaxed">{feature}</span>
                     </li>
                   ))}
                 </ul>
                 
-                {plan.video_limit && (
-                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600">
-                      <span className="font-semibold">{plan.video_limit}</span> videos per month
-                    </p>
-                  </div>
-                )}
-                
-                {!plan.video_limit && (
-                  <div className="mt-6 p-4 bg-green-50 rounded-lg">
-                    <p className="text-sm text-green-700 font-semibold">
-                      Unlimited videos
-                    </p>
-                  </div>
-                )}
+                {/* <div className="mt-auto">
+                  {plan.video_limit ? (
+                    <div className="p-4 bg-gray-50 rounded-lg border">
+                      <p className="text-sm text-gray-600 text-center">
+                        <span className="font-semibold text-gray-900">{plan.video_limit}</span> videos per month
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                      <p className="text-sm text-green-700 font-semibold text-center">
+                        Unlimited videos
+                      </p>
+                    </div>
+                  )}
+                </div> */}
               </CardContent>
 
-              <CardFooter className="pt-0">
+              <CardFooter className="pt-0 px-6 pb-6">
                 <Button
                   onClick={() => handleSelectPlan(plan)}
                   disabled={processing || isCurrentPlan(plan)}
-                  className={`w-full ${
+                  className={`w-full h-12 text-base font-medium transition-all duration-200 ${
                     plan.type === 'premium'
-                      ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                      ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white shadow-lg hover:shadow-xl'
                       : plan.type === 'basic'
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-gray-600 hover:bg-gray-700 text-white'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md hover:shadow-lg'
+                      : 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white shadow-md hover:shadow-lg'
+                  } ${
+                    isCurrentPlan(plan) 
+                      ? 'bg-green-600 hover:bg-green-700 cursor-not-allowed' 
+                      : ''
                   }`}
                 >
                   {processing && selectedPlan?.id === plan.id ? (
-                    <div className="flex items-center">
+                    <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                       Processing...
                     </div>
                   ) : isCurrentPlan(plan) ? (
-                    'Current Plan'
+                    <div className="flex items-center justify-center">
+                      <Check className="h-4 w-4 mr-2" />
+                      Current Plan
+                    </div>
                   ) : plan.type === 'free' ? (
                     'Get Started'
                   ) : (

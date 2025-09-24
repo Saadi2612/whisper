@@ -5,7 +5,7 @@ export const usePlanAccess = () => {
   const { user } = useAuth();
   
   // Get current plan type from user subscription
-  const currentPlan = user?.subscription?.plan?.type || 'free';
+  const currentPlan = user?.plan || 'free';
   const constraints = getPlanConstraints(currentPlan);
   
   // Check if user has access to a specific feature
@@ -55,6 +55,7 @@ export const usePlanAccess = () => {
     canAccessVideoFeature,
     canAccessFeature,
     getUpgradePrompt,
-    getPlanInfo
+    getPlanInfo,
+    getRequiredPlan
   };
 };

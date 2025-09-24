@@ -15,7 +15,7 @@ const LockedFeature = ({
   customMessage = null 
 }) => {
   const navigate = useNavigate();
-  const { canAccess, getUpgradePrompt, getPlanInfo } = usePlanAccess();
+  const { canAccess, getUpgradePrompt, getPlanInfo, getRequiredPlan } = usePlanAccess();
   const { currentPlan } = getPlanInfo();
   
   // If user has access, render the children
@@ -36,24 +36,7 @@ const LockedFeature = ({
     }
   };
   
-  const getRequiredPlan = () => {
-    // Determine required plan based on feature path
-    if (featurePath.includes('youtube') || featurePath.includes('topics') || featurePath.includes('saved') || featurePath.includes('queues')) {
-      return 'premium';
-    }
-    if (featurePath.includes('my_channels') || featurePath.includes('time_range') || featurePath.includes('q_and_a')) {
-      return 'basic';
-    }
-    if (featurePath.includes('tone_analysis')) {
-      return 'premium';
-    }
-    if (featurePath.includes('translation')) {
-      return 'premium';
-    }
-    return 'basic';
-  };
-  
-  const requiredPlan = getRequiredPlan();
+  const requiredPlan = getRequiredPlan(featurePath);
   const message = customMessage || getUpgradePrompt(featurePath);
   
   return (

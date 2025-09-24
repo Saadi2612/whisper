@@ -396,12 +396,25 @@ export const apiService = {
     }
   },
 
-  async createCheckoutSession(planId) {
+  async createCheckoutSession(planId, successUrl, cancelUrl) {
     try {
-      const response = await apiClient.post('/subscriptions/create-checkout-session', { plan_id: planId });
+      const response = await apiClient.post('/subscriptions/create-checkout-session', { 
+        plan_id: planId,
+        success_url: successUrl,
+        cancel_url: cancelUrl
+      });
       return response.data;
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to create checkout session');
+    }
+  },
+
+  async verifyStripeSession(sessionId) {
+    try {
+      const response = await apiClient.post(`/subscriptions/verify-session?session_id=${sessionId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to verify Stripe session');
     }
   },
 

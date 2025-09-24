@@ -5,6 +5,8 @@ import LandingPage from "./components/LandingPage";
 import Dashboard from "./components/Dashboard";
 import Settings from "./components/Settings";
 import Pricing from "./components/Pricing";
+import SuccessPage from "./components/SuccessPage";
+import CancelPage from "./components/CancelPage";
 import { AuthProvider } from "./contexts/AuthContext";
 import { Toaster } from "./components/ui/sonner";
 
@@ -26,6 +28,14 @@ function App() {
             <Route 
               path="/pricing" 
               element={<Pricing />} 
+            />
+            <Route 
+              path="/success" 
+              element={<SuccessPage />} 
+            />
+            <Route 
+              path="/cancel" 
+              element={<CancelPage />} 
             />
           </Routes>
         </BrowserRouter>

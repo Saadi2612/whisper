@@ -142,8 +142,8 @@ const Settings = () => {
       setAvailablePlans(plansData.plans || []);
       setCurrentPlan(subscriptionData.plan);
     } catch (error) {
-      console.error('Failed to load subscription data:', error);
-      toast.error('Failed to load subscription information');
+      console.error('Failed to load subscription data:', error?.message);
+      // toast.error('Failed to load subscription information');
     } finally {
       setSubscriptionLoading(false);
     }
